@@ -706,7 +706,6 @@ def LC_db(db):
 		LC_bar[p, c] = numerator/denominator
 		return numerator/denominator
 
-	IP()
 
 
 if __name__ == "__main__":
