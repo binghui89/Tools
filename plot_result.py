@@ -744,8 +744,12 @@ def plot_emis_all(*arg):
 						 41.5, 41.5, 41.5]) # kt
 	LIM_SO2  = np.array([52.0, 68.0, 57.6, 57.6, 57.6, 
 						 57.6, 57.6, 57.6]) # kt
-	LIM_CO2  = np.array([0, 0, 51843, 46508, 
-						 46508, 46508, 46508, 46508]) # kt
+	LIM_CO2  = np.array(
+		[
+		[0, 0, 51843, 46508, 46508, 46508, 46508, 46508],
+		[0, 0, 47114, 40404, 33694, 26984, 20274, 13564],
+		]
+	) # kt
 
 	# NOx emissions in metric tons
 	############################################################################
@@ -958,16 +962,20 @@ def plot_emis_all(*arg):
 			handles.append(h)
 
 	LIM_year = np.array(LIM_year)
-	LIM_CO2  = np.array(LIM_CO2)
-	h = ax.plot(LIM_year[np.nonzero(LIM_CO2)], LIM_CO2[np.nonzero(LIM_CO2)]/1E3,  '-sr')
-	h = mlines.Line2D([], [], color='red', marker='s')
-	# h = ax.fill_between(LIM_year[3:], 
-	# 					0, LIM_CO2[3:], 
-	# 					facecolor='r', 
-	# 					edgecolor=None,
-	# 					alpha=.3,
-	# 					hatch=None)
-	handles.append(h)
+	line_CO2 = ['--', '-']
+	for i in range(0, len(LIM_CO2)):
+		LIM_CO2  = np.array(LIM_CO2)
+		x = LIM_year[np.nonzero( LIM_CO2[i] )]
+		y = LIM_CO2[i][np.nonzero(LIM_CO2[i])]/1E3
+		h = ax.plot(x, y,  color='red', marker='s', linestyle = line_CO2[i])
+		h = mlines.Line2D([], [], color='red', marker='s', linestyle = line_CO2[i])
+		# h = ax.fill_between(LIM_year[3:], 
+		# 					0, LIM_CO2[3:], 
+		# 					facecolor='r', 
+		# 					edgecolor=None,
+		# 					alpha=.3,
+		# 					hatch=None)
+		handles.append(h)
 
 	plt.ylabel('Emissions (megatonnes)')
 	plt.xlabel('Year')
@@ -977,7 +985,7 @@ def plot_emis_all(*arg):
 	# box = ax.get_position()
 	# ax.set_position([box.x0, box.y0, box.width*0.9, box.height])
 	ax.legend(handles, 
-				['Coal', 'Natural gas', 'Other', 'Bioenergy', 'Oil', 'Limit'], 
+				['Coal', 'Natural gas', 'Other', 'Bioenergy', 'Oil', 'CPP', 'CP'], 
 				# bbox_to_anchor = (1.01, 0.5), 
 				loc='upper right')
 	ax.annotate('2015', xy=(2015, 80000), xytext=(2014, 75000), 
