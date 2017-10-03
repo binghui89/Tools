@@ -125,12 +125,6 @@ def solve_pf(p_model, p_data):
         # Assuming there is only one objective function
         return obj_values[0]
 
-        # Out-of-date for Pyomo 4.1
-        # obj = instance.active_components(Objective) 
-        # objs = obj.items()[0]
-        # obj_name, obj_value = objs[0], value(objs[1]())
-        # return obj_value
-
     from pyomo.core import Objective
 
     (head, tail) = os.path.split(p_model)
@@ -138,73 +132,11 @@ def solve_pf(p_model, p_data):
 
     s2cd_dict, s2fp_dict = return_CP_and_path(p_data)
 
-    # pwd = os.getcwd()
-    # os.chdir(p_data)
-
-    # s2fp_dict = defaultdict(deque) # Scenario to 'file path' dictionary, .dat not included
-    # s2cd_dict = defaultdict(float) # Scenario to conditonal density mapping
-    # sStructure = scenario_tree_model.create_instance( filename='ScenarioStructure.dat' )
-
-    # # The following code is borrowed from Kevin's temoa_lib.py
-    # ###########################################################################
-    # # Step 1: find the root node.  PySP doesn't make this very easy ...
-    
-    # # a child -> parent mapping, because every child has only one parent, but
-    # # not vice-versa
-    # ctpTree = dict() # Child to parent dict, one to one mapping
-    
-    # to_process = deque()
-    # to_process.extend( sStructure.Children.keys() )
-    # while to_process:
-    #         node = to_process.pop()
-    #         if node in sStructure.Children:
-    #                 # it's a parent!
-    #                 new_nodes = set( sStructure.Children[ node ] )
-    #                 to_process.extend( new_nodes )
-    #                 ctpTree.update({n : node for n in new_nodes })
-    
-    #                  # parents           -     children
-    # root_node = (set( ctpTree.values() ) - set( ctpTree.keys() )).pop()
-    
-    # # ptcTree = defaultdict( list ) # Parent to child node, one to multiple mapping
-    # # for c, p in ctpTree.iteritems():
-    # #         ptcTree[ p ].append( c )
-    # # ptcTree = dict( ptcTree )   # be slightly defensive; catch any additions
-    
-    # # leaf_nodes = set(ctpTree.keys()) - set(ctpTree.values())
-    # leaf_nodes = set(sStructure.ScenarioLeafNode.values()) # Try to hack Kevin's code
-    
-    # scenario_nodes = dict() # Map from leafnode to 'node path'
-    # for node in leaf_nodes: # e.g.: {Rs0s0: [R, Rs0, Rs0s0]}
-    #         s = deque()
-    #         scenario_nodes[ node ] = s
-    #         while node in ctpTree:
-    #                 s.append( node )
-    #                 node = ctpTree[ node ]
-    #         s.append( node )
-    #         s.reverse()
-    # ###########################################################################
-
-    # for s in sStructure.Scenarios:
-    #     cp = 1.0 # Starting probability
-    #     for n in scenario_nodes[sStructure.ScenarioLeafNode[s]]:
-    #         cp = cp*sStructure.ConditionalProbability[n]
-    #         if not sStructure.ScenarioBasedData.value:
-    #             s2fp_dict[s].append(n + '.dat')
-    #     s2cd_dict[s] = cp
-    
-    # from pyomo.core import Objective
-    # if sStructure.ScenarioBasedData.value:
-    #     for s in sStructure.Scenarios:
-    #         s2fp_dict[s].append(s + '.dat')
-    # os.chdir(pwd)
-
     pwd = os.getcwd()
     os.chdir(p_data)
     model_module = __import__(tail[:-3], globals(), locals())
     model = model_module.model
     pf_result = {'cost': list(), 'cd': list()}
-    # for s in sStructure.Scenarios:
     for s in s2fp_dict:
         pf_result['cd'].append(s2cd_dict[s])
         data = DataPortal(model=model)
@@ -215,7 +147,6 @@ def solve_pf(p_model, p_data):
         results = optimizer.solve(instance)
 
         instance.solutions.load_from(results)
-        # instance.load(results)
         obj_val = return_obj(instance)
         pf_result['cost'].append(obj_val)
         sys.stdout.write('\nSolved .dat(s) {}\n'.format(s2fp_dict[s]))
