@@ -52,14 +52,14 @@ def return_CP_and_path(p_data):
     to_process = deque()
     to_process.extend( sStructure.Children.keys() )
     while to_process:
-            node = to_process.pop()
-            if node in sStructure.Children:
-                    # it's a parent!
-                    new_nodes = set( sStructure.Children[ node ] )
-                    to_process.extend( new_nodes )
-                    ctpTree.update({n : node for n in new_nodes })
+        node = to_process.pop()
+        if node in sStructure.Children:
+            # it's a parent!
+            new_nodes = set( sStructure.Children[ node ] )
+            to_process.extend( new_nodes )
+            ctpTree.update({n : node for n in new_nodes })
     
-                     # parents           -     children
+    #                  parents           -     children
     root_node = (set( ctpTree.values() ) - set( ctpTree.keys() )).pop()
     
     # ptcTree = defaultdict( list ) # Parent to child node, one to multiple mapping
@@ -72,13 +72,13 @@ def return_CP_and_path(p_data):
     
     scenario_nodes = dict() # Map from leafnode to 'node path'
     for node in leaf_nodes: # e.g.: {Rs0s0: [R, Rs0, Rs0s0]}
-            s = deque()
-            scenario_nodes[ node ] = s
-            while node in ctpTree:
-                    s.append( node )
-                    node = ctpTree[ node ]
+        s = deque()
+        scenario_nodes[ node ] = s
+        while node in ctpTree:
             s.append( node )
-            s.reverse()
+            node = ctpTree[ node ]
+        s.append( node )
+        s.reverse()
     ###########################################################################
 
     for s in sStructure.Scenarios:
@@ -317,26 +317,30 @@ if __name__ == "__main__":
     # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NC/noCOAL-CP",
     # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NC/noCOAL-noCP",
     # ]
-    dummy_temoa_options = DummyTemoaConfig()
-    dummy_temoa_options.config = None
-    dummy_temoa_options.keepPyomoLP = False
-    dummy_temoa_options.saveTEXTFILE = False
-    dummy_temoa_options.path_to_db_io = None
-    dummy_temoa_options.saveEXCEL = False
+    # dummy_temoa_options = DummyTemoaConfig()
+    # dummy_temoa_options.config = None
+    # dummy_temoa_options.keepPyomoLP = False
+    # dummy_temoa_options.saveTEXTFILE = False
+    # dummy_temoa_options.path_to_db_io = None
+    # dummy_temoa_options.saveEXCEL = False
 
-    # db file should be under the p_data directory
-    # dummy_temoa_options.output = "NCreference.db"
-    dummy_temoa_options.output = "temoa_utopia.sqlite"
+    # # db file should be under the p_data directory
+    # # dummy_temoa_options.output = "NCreference.db"
+    # dummy_temoa_options.output = "temoa_utopia.sqlite"
     
     # do_test(p_model, p_data, dummy_temoa_options)
     # do_test(p_model, p_data)
 
     # p_model = "/mnt/disk2/bli6/TEMOA_stochastic/Farmer/ReferenceModel.py"
     # p_data = "/mnt/disk2/bli6/TEMOA_stochastic/Farmer/scenariodata"
+    p_model = "C:\\Users\\bli\\Downloads\\tmp\\TemoaS_lab\\Farmer\\ReferenceModel.py"
+    p_data = "C:\\Users\\bli\\Downloads\\tmp\\TemoaS_lab\\Farmer\\scenariodata"
+    do_test(p_model, p_data)
 
-    p_model = "/afs/unity.ncsu.edu/users/b/bli6/temoa/temoa_model/ReferenceModel.py"
-    p_data = "/afs/unity.ncsu.edu/users/b/bli6/temoa/tools/utopia_demand"
-    do_test(p_model, p_data, dummy_temoa_options)
+
+    # p_model = "/afs/unity.ncsu.edu/users/b/bli6/temoa/temoa_model/ReferenceModel.py"
+    # p_data = "/afs/unity.ncsu.edu/users/b/bli6/temoa/tools/utopia_demand"
+    # do_test(p_model, p_data, dummy_temoa_options)
 
     # source = 'C:\\Users\\bli\\Downloads\\tmp\\TemoaS_lab\\NC\\noIGCC-noCP\\NCreferenceS.R.xlsx'
     # target = 'template.xlsx'
