@@ -1,7 +1,6 @@
 # This version is compatible with Pyomo 5.2
 
-import os
-import sys
+import os, sys
 from pyomo.environ import *
 from pyomo.pysp.scenariotree.manager import \
     ScenarioTreeManagerClientSerial
@@ -27,48 +26,14 @@ from IPython import embed as IP
 class DummyTemoaConfig():
     pass
 
-def compute_evpi(ef_result, pf_result):
-    pf = 0
-    for i in range( 0, len(pf_result['cost']) ):
-        pf += pf_result['cd'][i]*pf_result['cost'][i]
-    return ef_result - pf
-
-def solve_pf(p_model, p_data):
-    """
-    solve_pf(p_model, p_data) -> dict()
-    Solves the model in perfect sight mode. 
-    p_model -> string, the path to the model file. 
-    p_data -> string, the path to the directory of data for the stochastic
-    mdoel, where ScenarioStructure.dat should resides.
-    Returns a dictionary including the value of objective function for each
-    scenario and its conditional probability.
-    """
-
-    def return_obj(instance):
-        from pyomo.core import Objective
-        obj = instance.component_objects(Objective, active = True)
-        obj_values = list()
-        for o in obj:
-            # See section 18.6.3 in Pyomo online doc
-            # https://taizilongxu.gitbooks.io/stackoverflow-about-python/content/59/README.html
-            method_obj = getattr(instance, str(o))
-            obj_values.append(method_obj())
-        # Assuming there is only one objective function
-        return obj_values[0]
-
-        # Out-of-date for Pyomo 4.1
-        # obj = instance.active_components(Objective) 
-        # objs = obj.items()[0]
-        # obj_name, obj_value = objs[0], value(objs[1]())
-        # return obj_value
-
-    import sys, os
+def return_CP_and_path(p_data):
+    # return_CP_and_path(p_data) -> dict(), dict()
+    # This function reads the path to the instance directory (p_data) and 
+    # returns conditional two dictionaries, the first one is the conditional 
+    # probability condition of a scenario, the second one is the path to
+    # all files of a scenario.
     from collections import deque, defaultdict
     from pyomo.pysp.util.scenariomodels import scenario_tree_model
-    from pyomo.core import Objective
-
-    (head, tail) = os.path.split(p_model)
-    sys.path.insert(0, head)
     pwd = os.getcwd()
     os.chdir(p_data)
 
@@ -128,11 +93,119 @@ def solve_pf(p_model, p_data):
     if sStructure.ScenarioBasedData.value:
         for s in sStructure.Scenarios:
             s2fp_dict[s].append(s + '.dat')
+    os.chdir(pwd)
+    return (s2cd_dict, s2fp_dict)
 
+def compute_evpi(ef_result, pf_result):
+    pf = 0
+    for i in range( 0, len(pf_result['cost']) ):
+        pf += pf_result['cd'][i]*pf_result['cost'][i]
+    return ef_result - pf
+
+def solve_pf(p_model, p_data):
+    """
+    solve_pf(p_model, p_data) -> dict()
+    Solves the model in perfect sight mode. 
+    p_model -> string, the path to the model file. 
+    p_data -> string, the path to the directory of data for the stochastic
+    mdoel, where ScenarioStructure.dat should resides.
+    Returns a dictionary including the value of objective function for each
+    scenario and its conditional probability.
+    """
+
+    def return_obj(instance):
+        from pyomo.core import Objective
+        obj = instance.component_objects(Objective, active = True)
+        obj_values = list()
+        for o in obj:
+            # See section 18.6.3 in Pyomo online doc
+            # https://taizilongxu.gitbooks.io/stackoverflow-about-python/content/59/README.html
+            method_obj = getattr(instance, str(o))
+            obj_values.append(method_obj())
+        # Assuming there is only one objective function
+        return obj_values[0]
+
+        # Out-of-date for Pyomo 4.1
+        # obj = instance.active_components(Objective) 
+        # objs = obj.items()[0]
+        # obj_name, obj_value = objs[0], value(objs[1]())
+        # return obj_value
+
+    from pyomo.core import Objective
+
+    (head, tail) = os.path.split(p_model)
+    sys.path.insert(0, head)
+
+    s2cd_dict, s2fp_dict = return_CP_and_path(p_data)
+
+    # pwd = os.getcwd()
+    # os.chdir(p_data)
+
+    # s2fp_dict = defaultdict(deque) # Scenario to 'file path' dictionary, .dat not included
+    # s2cd_dict = defaultdict(float) # Scenario to conditonal density mapping
+    # sStructure = scenario_tree_model.create_instance( filename='ScenarioStructure.dat' )
+
+    # # The following code is borrowed from Kevin's temoa_lib.py
+    # ###########################################################################
+    # # Step 1: find the root node.  PySP doesn't make this very easy ...
+    
+    # # a child -> parent mapping, because every child has only one parent, but
+    # # not vice-versa
+    # ctpTree = dict() # Child to parent dict, one to one mapping
+    
+    # to_process = deque()
+    # to_process.extend( sStructure.Children.keys() )
+    # while to_process:
+    #         node = to_process.pop()
+    #         if node in sStructure.Children:
+    #                 # it's a parent!
+    #                 new_nodes = set( sStructure.Children[ node ] )
+    #                 to_process.extend( new_nodes )
+    #                 ctpTree.update({n : node for n in new_nodes })
+    
+    #                  # parents           -     children
+    # root_node = (set( ctpTree.values() ) - set( ctpTree.keys() )).pop()
+    
+    # # ptcTree = defaultdict( list ) # Parent to child node, one to multiple mapping
+    # # for c, p in ctpTree.iteritems():
+    # #         ptcTree[ p ].append( c )
+    # # ptcTree = dict( ptcTree )   # be slightly defensive; catch any additions
+    
+    # # leaf_nodes = set(ctpTree.keys()) - set(ctpTree.values())
+    # leaf_nodes = set(sStructure.ScenarioLeafNode.values()) # Try to hack Kevin's code
+    
+    # scenario_nodes = dict() # Map from leafnode to 'node path'
+    # for node in leaf_nodes: # e.g.: {Rs0s0: [R, Rs0, Rs0s0]}
+    #         s = deque()
+    #         scenario_nodes[ node ] = s
+    #         while node in ctpTree:
+    #                 s.append( node )
+    #                 node = ctpTree[ node ]
+    #         s.append( node )
+    #         s.reverse()
+    # ###########################################################################
+
+    # for s in sStructure.Scenarios:
+    #     cp = 1.0 # Starting probability
+    #     for n in scenario_nodes[sStructure.ScenarioLeafNode[s]]:
+    #         cp = cp*sStructure.ConditionalProbability[n]
+    #         if not sStructure.ScenarioBasedData.value:
+    #             s2fp_dict[s].append(n + '.dat')
+    #     s2cd_dict[s] = cp
+    
+    # from pyomo.core import Objective
+    # if sStructure.ScenarioBasedData.value:
+    #     for s in sStructure.Scenarios:
+    #         s2fp_dict[s].append(s + '.dat')
+    # os.chdir(pwd)
+
+    pwd = os.getcwd()
+    os.chdir(p_data)
     model_module = __import__(tail[:-3], globals(), locals())
     model = model_module.model
     pf_result = {'cost': list(), 'cd': list()}
-    for s in sStructure.Scenarios:
+    # for s in sStructure.Scenarios:
+    for s in s2fp_dict:
         pf_result['cd'].append(s2cd_dict[s])
         data = DataPortal(model=model)
         for dat in s2fp_dict[s]:
@@ -196,12 +269,17 @@ def solve_ef(p_model, p_data, dummy_temoa_options = None):
             temoa_options.path_to_db_io = dummy_temoa_options.path_to_db_io
             temoa_options.saveEXCEL = dummy_temoa_options.saveEXCEL
             ef_result.solution.Status = 'feasible' # Assume it is feasible
+            # Maybe there is a better solution using manager, but now it is a 
+            # kludge to use return_CP_and_path() function
+            s2cd_dict, s2fp_dict = return_CP_and_path(p_data)
             for s in manager.scenario_tree.scenarios:
                 ins = s._instance
                 temoa_options.scenario = s.name
-                temoa_options.dot_dat = [ 
-                os.path.join(options.scenario_tree_location, s.name + '.dat') 
-                ]
+                temoa_options.dot_dat = list()
+                for fname in s2fp_dict[s.name]:
+                    temoa_options.dot_dat.append(
+                        os.path.join(options.scenario_tree_location, fname)
+                    )
                 temoa_options.output = os.path.join(
                     options.scenario_tree_location, 
                     dummy_temoa_options.output
@@ -223,19 +301,20 @@ def do_test(p_model, p_data, temoa_config = None):
         p_data = [p_data]
     for this_data in p_data:
         sys.stderr.write('\nSolving perfect sight mode\n')
-        sys.stdout.write('-'*25 + '\n')
+        sys.stderr.write('-'*25 + '\n')
         pf_result = solve_pf(p_model, this_data)
         msg = 'Time: {} s\n'.format( timeit() )
         sys.stderr.write(msg)
     
         sys.stderr.write('\nSolving extensive form\n')
-        sys.stdout.write('-'*25 + '\n')
+        sys.stderr.write('-'*25 + '\n')
         ef_result = solve_ef(p_model, this_data, temoa_config)
     
         msg = '\nTime: {} s\n'.format( timeit() )
+        sys.stderr.write(msg)
         msg += 'runef objective value: {}\n'.format(ef_result)
         msg += 'EVPI: {}\n'.format( compute_evpi(ef_result, pf_result) )
-        sys.stderr.write(msg)
+        sys.stdout.write(msg)
 
 def handle_excel(source, target):
     # Copy data from source and put it into target.
@@ -296,25 +375,37 @@ def handle_excel(source, target):
     wb2.save(target)
 
 if __name__ == "__main__":
-    # p_model = "/afs/unity.ncsu.edu/users/b/bli6/temoa/temoa_model"
+    # p_model = "/afs/unity.ncsu.edu/users/b/bli6/temoa/temoa_model/ReferenceModel.py"
     # p_data = [
-    # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NC/noIGCC-CP",
-    # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NC/noIGCC-noCP",
-    # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NC/IGCC-CP",
-    # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NC/IGCC-noCP",
+    # # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NC/noIGCC-CP",
+    # # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NC/noIGCC-noCP",
+    # # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NC/IGCC-CP",
+    # # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NC/IGCC-noCP",
+    # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NC/COAL-CP",
+    # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NC/COAL-noCP",
+    # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NC/noCOAL-CP",
+    # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NC/noCOAL-noCP",
     # ]
-    # dummy_temoa_options = DummyTemoaConfig()
-    # dummy_temoa_options.config = None
-    # dummy_temoa_options.keepPyomoLP = False
-    # dummy_temoa_options.saveTEXTFILE = False
-    # dummy_temoa_options.path_to_db_io = None
-    # dummy_temoa_options.saveEXCEL = False
-    # dummy_temoa_options.output = "NCreference.db"
-    # do_test(p_model, p_data, dummy_temoa_options)
+    dummy_temoa_options = DummyTemoaConfig()
+    dummy_temoa_options.config = None
+    dummy_temoa_options.keepPyomoLP = False
+    dummy_temoa_options.saveTEXTFILE = False
+    dummy_temoa_options.path_to_db_io = None
+    dummy_temoa_options.saveEXCEL = False
 
-    p_model = "/mnt/disk2/bli6/TEMOA_stochastic/Farmer/ReferenceModel.py"
-    p_data = "/mnt/disk2/bli6/TEMOA_stochastic/Farmer/scenariodata"
-    do_test(p_model, p_data)
+    # db file should be under the p_data directory
+    # dummy_temoa_options.output = "NCreference.db"
+    dummy_temoa_options.output = "temoa_utopia.sqlite"
+    
+    # do_test(p_model, p_data, dummy_temoa_options)
+    # do_test(p_model, p_data)
+
+    # p_model = "/mnt/disk2/bli6/TEMOA_stochastic/Farmer/ReferenceModel.py"
+    # p_data = "/mnt/disk2/bli6/TEMOA_stochastic/Farmer/scenariodata"
+
+    p_model = "/afs/unity.ncsu.edu/users/b/bli6/temoa/temoa_model/ReferenceModel.py"
+    p_data = "/afs/unity.ncsu.edu/users/b/bli6/temoa/tools/utopia_demand"
+    do_test(p_model, p_data, dummy_temoa_options)
 
     # source = 'C:\\Users\\bli\\Downloads\\tmp\\TemoaS_lab\\NC\\noIGCC-noCP\\NCreferenceS.R.xlsx'
     # target = 'template.xlsx'
