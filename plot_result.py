@@ -1,5 +1,5 @@
 #!/usr/bin/env pyomo_python
-import sqlite3, sys
+import sqlite3, sys, getopt
 from matplotlib import pyplot as plt
 import matplotlib.lines as mlines
 import numpy as np
@@ -130,20 +130,23 @@ hatch_map = {
     'other': '++'
     }
 
-def plot_result(fname):
+def plot_result(fname, s_chosen):
     con = sqlite3.connect(fname)
     cur = con.cursor()
 
     qry = "SELECT * FROM Output_CapacityByPeriodAndTech"
+    qry += " WHERE scenario='" + s_chosen + "'"
     cur.execute(qry)
     Output_CapacityByPeriodAndTech = cur.fetchall()
     
     # qry = "SELECT * FROM Output_VFlow_Out WHERE output_comm == 'ELC'"
     qry = "SELECT * FROM Output_VFlow_Out"
+    qry += " WHERE scenario='" + s_chosen + "'"
     cur.execute(qry)
     Output_Activity = cur.fetchall()
     
     qry = "SELECT * FROM Output_Emissions"
+    qry += " WHERE scenario='" + s_chosen + "'"
     cur.execute(qry)
     Output_Emissions = cur.fetchall()
     
@@ -1933,8 +1936,32 @@ def plot_LCOE_clean_center():
     ax.yaxis.grid(True)
     plt.show()
 
+def do_plot(inputs):
+
+    fname = None
+    scenario = None
+    
+    if inputs is None:
+        raise "no arguments found"
+        
+    for opt, arg in inputs.iteritems():
+        if opt in ("-f", "--fname"):
+            fname = arg
+        elif opt in ("-s", "--scenario"):
+            scenario = arg
+        elif opt in ("-h", "--help") :
+            print "Use as :\n    python DB_to_Excel.py -f <fname> -s <scenario>    Use -h for help."                          
+            sys.exit()
+    print 'Read database: {}'.format(fname)
+    print 'Plot out scenario: {}'.format(scenario)
+    plot_result(fname, scenario)
+
 if __name__ == "__main__":
-    fname = sys.argv[1]
+    argv = sys.argv[1:]
+    opts, args = getopt.getopt(argv, "hf:s:", ["help", "fname=", "scenario="])
+    print opts
+    do_plot( dict(opts) )
+
 
     # plot_NCdemand_all()
     # plot_emis_all()    
@@ -1944,5 +1971,4 @@ if __name__ == "__main__":
     # plot_LCOE()
     # plot_LCOE_clean_center()
 
-    plot_result(fname)
     # IP()
