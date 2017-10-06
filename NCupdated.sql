@@ -11126,7 +11126,7 @@ CREATE TABLE MinCapacity (
    FOREIGN KEY(periods) REFERENCES time_periods(t_periods),
    FOREIGN KEY(tech) REFERENCES technologies(tech) );
    
-INSERT INTO "MinCapacity" VALUES(2030, 'EURNALWR15',  2.2*0.68, 'GW', '# 2GW of new nuclear added per duke IRP (carolinas); 68% of energy sent to NC per Energy Policy Council');
+-- INSERT INTO "MinCapacity" VALUES(2030, 'EURNALWR15',  2.2*0.68, 'GW', '# 2GW of new nuclear added per duke IRP (carolinas); 68% of energy sent to NC per Energy Policy Council');
 
 
 -------------------------------------------------
