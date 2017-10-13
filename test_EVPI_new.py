@@ -44,11 +44,11 @@ def return_CP_and_path(p_data):
     # The following code is borrowed from Kevin's temoa_lib.py
     ###########################################################################
     # Step 1: find the root node.  PySP doesn't make this very easy ...
-    
+
     # a child -> parent mapping, because every child has only one parent, but
     # not vice-versa
     ctpTree = dict() # Child to parent dict, one to one mapping
-    
+
     to_process = deque()
     to_process.extend( sStructure.Children.keys() )
     while to_process:
@@ -58,15 +58,15 @@ def return_CP_and_path(p_data):
             new_nodes = set( sStructure.Children[ node ] )
             to_process.extend( new_nodes )
             ctpTree.update({n : node for n in new_nodes })
-    
-    #                  parents           -     children
+
+                     # parents           -     children
     root_node = (set( ctpTree.values() ) - set( ctpTree.keys() )).pop()
-    
+
     # ptcTree = defaultdict( list ) # Parent to child node, one to multiple mapping
     # for c, p in ctpTree.iteritems():
     #         ptcTree[ p ].append( c )
     # ptcTree = dict( ptcTree )   # be slightly defensive; catch any additions
-    
+
     # leaf_nodes = set(ctpTree.keys()) - set(ctpTree.values())
     leaf_nodes = set(sStructure.ScenarioLeafNode.values()) # Try to hack Kevin's code
     
@@ -96,6 +96,108 @@ def return_CP_and_path(p_data):
     os.chdir(pwd)
     return (s2cd_dict, s2fp_dict)
 
+def return_breakeven(ef_instance, instance, techs):
+    # Return break-even costs for stochastic runs. Need the extensive form
+    # instance (ef_instance), and scenario-specific instance (instance), and the
+    # technologies of which the break-even costs are required.
+    coef_CAP = dict()
+    scal_CAP = dict()
+    # Break-even investment cost for this scenario, indexed by technology
+    years    = list()
+    bic_s    = dict()
+    ic_s     = dict() # Raw investment costs for this scenario, indexed by tech
+    for t in techs:
+        vintages = instance.vintage_optimize
+        P_0 = min( instance.time_optimize )
+        GDR = value( instance.GlobalDiscountRate )
+        MLL = instance.ModelLoanLife
+        MPL = instance.ModelProcessLife
+        LLN = instance.LifetimeLoanProcess
+        x   = 1 + GDR    # convenience variable, nothing more.
+
+        bic_s[t] = list()
+        ic_s[t]  = list()
+        years = vintages.value
+        for v in vintages:
+            if (t, v) not in instance.CostInvest:
+                continue
+            period_available = set()
+            for p in instance.time_future:
+                if (p, t, v) in instance.CostFixed.keys():
+                    period_available.add(p)
+
+            # Coefficient for investment cost
+            c_i = ( 
+                    instance.CostInvest[t, v] 
+                    * instance.LoanAnnualize[t, v] 
+                    * ( LLN[t, v] if not GDR else 
+                        (x**(P_0 - v + 1) 
+                        * ( 1 - x **( -value(LLN[t, v]) ) ) 
+                        / GDR) 
+                      ) 
+            )
+
+            # Coefficient for salvage value
+            c_s = (-1)*(
+                value( instance.CostInvest[t, v] )
+                * value( instance.SalvageRate[t, v] )
+                / ( 1 if not GDR else 
+                    (1 + GDR)**( 
+                        instance.time_future.last() 
+                        - instance.time_future.first()
+                        - 1
+                        ) 
+                    )
+                )
+
+            # Coefficient for fixed cost
+            c_f = sum( 
+                instance.CostFixed[p, t, v]
+                * ( MPL[p, t, v] if not GDR else
+                    (x**(P_0 - p + 1)
+                    * ( 1 - x**( -value(MPL[p, t, v]) ) )
+                    / GDR ) 
+                  )
+                for p in period_available 
+            ) 
+
+            c = c_i + c_s + c_f
+            s = (c - ef_instance.lrc[instance.V_Capacity[t, v]])/c
+            coef_CAP[t, v] = c
+            scal_CAP[t, v] = s # Must reduce TO this percentage
+            bic_s[t].append(scal_CAP[t, v]*instance.CostInvest[t, v])
+            ic_s[t].append(instance.CostInvest[t, v])
+
+        # print "{:>10s}\t{:>7s}\t{:>6s}\t{:>4s}\t{:>6s}\t{:>5s}\t{:>7s}\t{:>7s}\t{:>5s}\t{:>3s}\t{:>5s}".format('Tech','Vintage', 'L. RC', 'Coef', 'U. RC', 'Scale', 'BE IC', 'BE FC', 'IC', 'FC', 'Cap')
+        print "{:>10s}\t{:>7s}\t{:>6s}\t{:>4s}\t{:>6s}\t{:>5s}\t{:>7s}\t{:>5s}\t{:>5s}".format('Tech','Vintage', 'L. RC', 'Coef', 'U. RC', 'Scale', 'BE IC', 'IC', 'Cap')
+        for v in vintages:
+            if (t, v) not in instance.CostInvest:
+                continue
+            lrc = ef_instance.lrc[instance.V_Capacity[t, v]]
+            urc = ef_instance.urc[instance.V_Capacity[t, v]]
+
+            # print "{:>10s}\t{:>7g}\t{:>6.0f}\t{:>4.0f}\t{:>6.0f}\t{:>5.3f}\t{:>7.1f}\t{:>7.1f}\t{:>5.0f}\t{:>3.0f}\t{:>5.3f}".format(
+            # t, v, lrc, coef_CAP[t, v], urc, scal_CAP[t, v], 
+            # scal_CAP[t, v]*instance.CostInvest[t, v], 
+            # scal_CAP[t, v]*instance.CostFixed[v, t, v], # Use the FC of the first period
+            # instance.CostInvest[t,v],
+            # instance.CostFixed[v, t, v],
+            # value(instance.V_Capacity[t, v])
+            # )
+            print "{:>10s}\t{:>7g}\t{:>6.0f}\t{:>4.0f}\t{:>6.0f}\t{:>5.3f}\t{:>7.1f}\t{:>5.0f}\t{:>5.3f}".format(
+            t, v, lrc, coef_CAP[t, v], urc, scal_CAP[t, v], 
+            scal_CAP[t, v]*instance.CostInvest[t, v], 
+            instance.CostInvest[t,v],
+            value(instance.V_Capacity[t, v])
+            )
+
+    # print 'Dual and slack variables for emission caps:'
+    # for e in instance.commodity_emissions:
+    #     for p in instance.time_optimize:
+    #         if (p, e) in instance.EmissionLimitConstraint:
+    #             print p, e, ef_instance.dual[instance.EmissionLimitConstraint[p, e]], '\t', ef_instance.slack[instance.EmissionLimitConstraint[p, e]]
+    return years, bic_s, ic_s
+
 def compute_evpi(ef_result, pf_result):
     pf = 0
     for i in range( 0, len(pf_result['cost']) ):
@@ -119,11 +221,17 @@ def solve_pf(p_model, p_data):
         obj_values = list()
         for o in obj:
             # See section 18.6.3 in Pyomo online doc
-            # https://taizilongxu.gitbooks.io/stackoverflow-about-python/content/59/README.html
+            # https://stackoverflow.com/a/3071/4626354
             method_obj = getattr(instance, str(o))
             obj_values.append(method_obj())
         # Assuming there is only one objective function
         return obj_values[0]
+
+        # Out-of-date for Pyomo 4.1
+        # obj = instance.active_components(Objective) 
+        # objs = obj.items()[0]
+        # obj_name, obj_value = objs[0], value(objs[1]())
+        # return obj_value
 
     from pyomo.core import Objective
 
@@ -137,6 +245,7 @@ def solve_pf(p_model, p_data):
     model_module = __import__(tail[:-3], globals(), locals())
     model = model_module.model
     pf_result = {'cost': list(), 'cd': list()}
+    # for s in sStructure.Scenarios:
     for s in s2fp_dict:
         pf_result['cd'].append(s2cd_dict[s])
         data = DataPortal(model=model)
@@ -147,6 +256,7 @@ def solve_pf(p_model, p_data):
         results = optimizer.solve(instance)
 
         instance.solutions.load_from(results)
+        # instance.load(results)
         obj_val = return_obj(instance)
         pf_result['cost'].append(obj_val)
         sys.stdout.write('\nSolved .dat(s) {}\n'.format(s2fp_dict[s]))
@@ -178,15 +288,21 @@ def solve_ef(p_model, p_data, dummy_temoa_options = None):
     # manager.close() and gracefully shutdown
     with ScenarioTreeManagerClientSerial(options) as manager:
         manager.initialize()
-    
+
         ef_instance = create_ef_instance(manager.scenario_tree,
                                          verbose_output=options.verbose)
-    
-        ef_instance.dual = Suffix(direction=Suffix.IMPORT)
-    
+
+        ef_instance.dual  = Suffix(direction=Suffix.IMPORT)
+        ef_instance.lrc   = Suffix(direction=Suffix.IMPORT)
+        ef_instance.urc   = Suffix(direction=Suffix.IMPORT)
+        ef_instance.slack = Suffix(direction=Suffix.IMPORT)
+
         with SolverFactory('cplex') as opt:
-    
-            ef_result = opt.solve(ef_instance)
+
+            ef_result = opt.solve(
+                ef_instance,
+                suffixes=['dual', 'urc', 'slack', 'lrc']
+            )
 
         # Write to database
         if dummy_temoa_options:
@@ -306,41 +422,53 @@ def handle_excel(source, target):
     wb2.save(target)
 
 if __name__ == "__main__":
-    # p_model = "/afs/unity.ncsu.edu/users/b/bli6/temoa/temoa_model/ReferenceModel.py"
-    # p_data = [
-    # # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NC/noIGCC-CP",
-    # # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NC/noIGCC-noCP",
-    # # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NC/IGCC-CP",
-    # # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NC/IGCC-noCP",
+    p_model = "/afs/unity.ncsu.edu/users/b/bli6/temoa/temoa_model/ReferenceModel.py"
+    p_data = [
+    # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NC/noIGCC-CP",
+    # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NC/noIGCC-noCP",
+    # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NC/IGCC-CP",
+    # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NC/IGCC-noCP",
     # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NC/COAL-CP",
     # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NC/COAL-noCP",
     # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NC/noCOAL-CP",
     # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NC/noCOAL-noCP",
-    # ]
-    # dummy_temoa_options = DummyTemoaConfig()
-    # dummy_temoa_options.config = None
-    # dummy_temoa_options.keepPyomoLP = False
-    # dummy_temoa_options.saveTEXTFILE = False
-    # dummy_temoa_options.path_to_db_io = None
-    # dummy_temoa_options.saveEXCEL = False
+    # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NCupdated/CCS-CP",
+    # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NCupdated/CCS-noCP",
+    # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NCupdated/noCCS-CP",
+    # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NCupdated/noCCS-noCP",
+    # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NCupdated/IGCCS-CP",
+    # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NCupdated/IGCCS-noCP",
+    # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NCupdated/noIGCCS-CP",
+    # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NCupdated/noIGCCS-noCP",
+    # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NCupdated/NGCCS-CP",
+    # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NCupdated/NGCCS-noCP",
+    # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NCupdated/noNGCCS-CP",
+    # "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NCupdated/noNGCCS-noCP",
+    "/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NCupdated/rc_analysis",
+    ]
 
-    # # db file should be under the p_data directory
-    # # dummy_temoa_options.output = "NCreference.db"
-    # dummy_temoa_options.output = "temoa_utopia.sqlite"
-    
-    # do_test(p_model, p_data, dummy_temoa_options)
-    # do_test(p_model, p_data)
+    dummy_temoa_options = DummyTemoaConfig()
+    dummy_temoa_options.config = None
+    dummy_temoa_options.keepPyomoLP = False
+    dummy_temoa_options.saveTEXTFILE = False
+    dummy_temoa_options.path_to_db_io = None
+    dummy_temoa_options.saveEXCEL = False
+
+    # db file should be under the p_data directory
+    # dummy_temoa_options.output = "NCreference.db"
+    dummy_temoa_options.output = "NCupdated.db"
 
     # p_model = "/mnt/disk2/bli6/TEMOA_stochastic/Farmer/ReferenceModel.py"
     # p_data = "/mnt/disk2/bli6/TEMOA_stochastic/Farmer/scenariodata"
-    p_model = "C:\\Users\\bli\\Downloads\\tmp\\TemoaS_lab\\Farmer\\ReferenceModel.py"
-    p_data = "C:\\Users\\bli\\Downloads\\tmp\\TemoaS_lab\\Farmer\\scenariodata"
-    do_test(p_model, p_data)
-
 
     # p_model = "/afs/unity.ncsu.edu/users/b/bli6/temoa/temoa_model/ReferenceModel.py"
     # p_data = "/afs/unity.ncsu.edu/users/b/bli6/temoa/tools/utopia_demand"
-    # do_test(p_model, p_data, dummy_temoa_options)
+
+    # p_model = '/afs/unity.ncsu.edu/users/b/bli6/temoa/temoa_model/ReferenceModel.py'
+    # p_data  = '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/test_twotechs_1'
+
+    do_test(p_model, p_data, dummy_temoa_options)
+    # do_test(p_model, p_data)
 
     # source = 'C:\\Users\\bli\\Downloads\\tmp\\TemoaS_lab\\NC\\noIGCC-noCP\\NCreferenceS.R.xlsx'
     # target = 'template.xlsx'
