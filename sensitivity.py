@@ -4,13 +4,13 @@ from pyomo.opt import SolverFactory
 import sys, xlsxwriter
 from matplotlib import pyplot as plt
 import numpy as np
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from time import time
 from IPython import embed as IP
 
 sys.path.append("/afs/unity.ncsu.edu/users/b/bli6/temoa/temoa_model")
 
-def return_c_rhs(block, unfixed):
+def return_c_vector(block, unfixed):
     # Note that this function is adapted function collect_linear_terms defined
     # in pyomo/repn/collect.py.
     from pyutilib.misc import Bunch
@@ -65,6 +65,7 @@ def sensitivity(dat, techs):
         data.load(filename=d)
     instance = model.create_instance(data)
     optimizer = SolverFactory('cplex')
+    optimizer.options['lpmethod'] = 1 # Use primal simplex
     results = optimizer.solve(instance, suffixes=['dual', 'urc', 'slack', 'lrc'])
     instance.solutions.load_from(results)
 
@@ -164,6 +165,186 @@ def sensitivity(dat, techs):
                 for tod in instance.time_of_day:
                     print p, s, tod, instance.dual[instance.DemandConstraint[p,s,tod,c]], instance.slack[instance.DemandConstraint[p,s,tod,c]]
 
+def sen_bin_search():
+    # Sensitivity analysis by binary search to find break-even cost
+    # years, bic_s, ic_s, cap_s = sensitivity(dat, techs)
+    target_year = 2020
+    target_tech = 'ECOALIGCCS'
+    dat = ['NCupdated.dat']
+    # dat = ['/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20151124/reference.dat']
+    epsilon = 5
+
+    t0 = time()
+    time_mark = lambda: time() - t0 
+    from temoa_model import temoa_create_model
+    model = temoa_create_model()
+    
+    model.dual  = Suffix(direction=Suffix.IMPORT)
+    model.rc    = Suffix(direction=Suffix.IMPORT)
+    model.slack = Suffix(direction=Suffix.IMPORT)
+    model.lrc   = Suffix(direction=Suffix.IMPORT)
+    model.urc   = Suffix(direction=Suffix.IMPORT)
+
+    optimizer = SolverFactory('cplex')
+    optimizer.options['lpmethod'] = 2 # Use dual simplex
+
+    data = DataPortal(model = model)
+    for d in dat:
+        data.load(filename=d)
+    instance = model.create_instance(data)
+
+    ic = data['CostInvest'][target_tech, target_year]
+    fc = data['CostFixed'][target_year, target_tech, target_year]
+
+    # bic_u = data['CostInvest'][target_tech, target_year]
+    # bfc_u = data['CostFixed'][target_year, target_tech, target_year]
+    # bic_l = 0
+    # bfc_l = 0
+    cap_target = 0
+    scale_u = 1.0
+    scale_l = 0.0
+
+    history = dict()
+    # history['bic_l']   = [bic_l]
+    # history['bic_u']   = [bic_u]
+    # history['bfc_l']   = [bfc_l]
+    # history['bfc_u']   = [bfc_u]
+    history['scale_u'] = [scale_u]
+    history['scale_l'] = [scale_l]
+
+    counter = 0
+    scale_this = scale_u # Starting scale
+    # while (bic_u - bic_l) >= 5 and counter <= 20:
+    while (scale_u - scale_l) >= 0.01 and counter <= 20:
+        # ic_this = data['CostInvest'][target_tech, target_year]
+        # fc_this = data['CostFixed'][target_year, target_tech, target_year]
+        if cap_target <= 0:
+            scale_u = scale_this
+            history['scale_u'].append(scale_u)
+        else:
+            scale_l = scale_this
+            history['scale_l'].append(scale_l)
+        counter += 1
+
+        scale_this = (scale_u + scale_l)*0.5
+        data['CostInvest'][target_tech, target_year] = scale_this*ic
+        for y in range(2015, 2055, 5):
+            if (y, target_tech, target_year) in data['CostFixed']:
+                data['CostFixed'][y, target_tech, target_year] = fc*scale_this
+
+
+        print 'Iteration # {} starts at {} s'.format( counter, time_mark() )
+        instance = model.create_instance(data)
+        instance.preprocess()
+        results = optimizer.solve(instance, suffixes=['dual', 'urc', 'slack', 'lrc'])
+        instance.solutions.load_from(results)
+        cap_target = value( instance.V_Capacity[target_tech, target_year] )
+        print 'Iteration # {} solved at {} s'.format( counter, time_mark() )
+        print 'Iteration # {}, scale: {:1.2f}, capacity: {} GW'.format( 
+            counter,
+            scale_this,
+            cap_target)
+    return
+
+def sen_range():
+    # Given a range of scaling factor for coefficient of a specific V_Capacity, 
+    # returns objective value, reduced cost, capacity etc. for each scaling 
+    # factor
+    target_year = 2020
+    target_tech = 'ECOALIGCCS'
+    dat = ['NCupdated.dat']
+    scales = [ 0.001* i for i in range(150, 305, 5) ]
+    algmap = {
+        'primal simplex': 1,
+        'dual simplex':   2,
+        'barrier':        4
+    } # cplex definition
+
+    t0 = time()
+    time_mark = lambda: time() - t0 
+    from temoa_model import temoa_create_model
+    model = temoa_create_model()
+    
+    model.dual  = Suffix(direction=Suffix.IMPORT)
+    model.rc    = Suffix(direction=Suffix.IMPORT)
+    model.slack = Suffix(direction=Suffix.IMPORT)
+    model.lrc   = Suffix(direction=Suffix.IMPORT)
+    model.urc   = Suffix(direction=Suffix.IMPORT)
+
+    data = DataPortal(model = model)
+    for d in dat:
+        data.load(filename=d)
+    ic0 = data['CostInvest'][target_tech, target_year]
+    fc0 = data['CostFixed'][target_year, target_tech, target_year]
+
+    optimizer = SolverFactory('cplex')
+    obj = dict()
+    cap = dict()
+    lrc = dict()
+    urc = dict()
+    bic = dict()
+    bfc = dict()
+    ic  = dict() # Original IC
+    fc  = dict() # Original FC
+
+    for algorithm in ['barrier', 'dual simplex', 'primal simplex']:
+        optimizer.options['lpmethod'] = algmap[algorithm]
+        print 'Algorithm: {}'.format( algorithm )
+
+        obj_alg = list()
+        cap_alg = defaultdict(list)
+        lrc_alg = defaultdict(list)
+        urc_alg = defaultdict(list)
+        bic_alg = defaultdict(list)
+        bfc_alg = defaultdict(list)
+        ic_alg  = defaultdict(list)
+        fc_alg  = defaultdict(list)
+        for s in scales:
+            print 'Scale: {:>.3f} starts at t = {:>7.2f} s'.format(s, time_mark() )
+            data['CostInvest'][target_tech, target_year] = s*ic0
+            for y in data['time_future']:
+                if (y, target_tech, target_year) in data['CostFixed']:
+                    data['CostFixed'][y, target_tech, target_year] = s*fc0
+            instance = model.create_instance(data)
+            instance.preprocess()
+            results = optimizer.solve(instance, suffixes=['dual', 'urc', 'slack', 'lrc'])
+            instance.solutions.load_from(results)
+
+            obj_alg.append( value(instance.TotalCost) )
+            for y in instance.time_optimize:
+                key = str(y)
+                c_vector = return_c_vector(instance, [])
+                coef = c_vector[ ( 'V_Capacity', (target_tech, target_year) )]
+                capacity = value(instance.V_Capacity[target_tech, target_year])
+                lower_rc = value(
+                    instance.lrc[ instance.V_Capacity[target_tech, target_year] ]
+                )
+                upper_rc = value(
+                    instance.urc[ instance.V_Capacity[target_tech, target_year] ]
+                )
+                cost_i   = value( instance.CostInvest[target_tech, target_year] )
+                cost_f   = value( instance.CostFixed[target_year, target_tech, target_year] )
+                s_be = ( coef - lower_rc ) / coef # Break-even scale
+
+                cap_alg[key].append( capacity )
+                lrc_alg[key].append(lower_rc)
+                urc_alg[key].append(upper_rc)
+                ic_alg[key].append(cost_i)
+                fc_alg[key].append(cost_f)
+                bic_alg[key].append(s_be*cost_i)
+                bfc_alg[key].append(s_be*cost_f)
+
+            obj[algorithm] = obj_alg
+            cap[algorithm] = cap_alg
+            lrc[algorithm] = lrc_alg
+            urc[algorithm] = urc_alg
+            bic[algorithm] = bic_alg
+            bfc[algorithm] = bfc_alg
+            ic[algorithm]  = ic_alg
+            fc[algorithm]  = fc_alg
+    IP()
+
+
 def explore_Cost_marginal(dat):
     from temoa_model import temoa_create_model
     model = temoa_create_model()
@@ -203,83 +384,6 @@ def explore_Cost_marginal(dat):
             for s in instance.time_season:
                 for tod in instance.time_of_day:
                     print p, s, tod, instance.dual[instance.DemandConstraint[p,s,tod,c]], instance.slack[instance.DemandConstraint[p,s,tod,c]]
-
-def sen_iter():
-    # Sensitivity analysis by iterative analysis
-    # years, bic_s, ic_s, cap_s = sensitivity(dat, techs)
-    target_year = 2020
-    target_tech = 'ECOALIGCCS'
-    dat = ['NCupdated.dat']
-    epsilon = 5
-
-    t0 = time()
-    time_mark = lambda: time() - t0 
-    from temoa_model import temoa_create_model
-    model = temoa_create_model()
-    
-    model.dual  = Suffix(direction=Suffix.IMPORT)
-    model.rc    = Suffix(direction=Suffix.IMPORT)
-    model.slack = Suffix(direction=Suffix.IMPORT)
-    model.lrc   = Suffix(direction=Suffix.IMPORT)
-    model.urc   = Suffix(direction=Suffix.IMPORT)
-
-    optimizer = SolverFactory('cplex')
-
-    data = DataPortal(model = model)
-    for d in dat:
-        data.load(filename=d)
-    instance = model.create_instance(data)
-
-    ic = data['CostInvest'][target_tech, target_year]
-    fc = data['CostFixed'][target_year, target_tech, target_year]
-
-    # bic_u = data['CostInvest'][target_tech, target_year]
-    # bfc_u = data['CostFixed'][target_year, target_tech, target_year]
-    # bic_l = 0
-    # bfc_l = 0
-    cap_target = 0
-    scale_u = 1.0
-    scale_l = 0.0
-
-    history = dict()
-    # history['bic_l']   = [bic_l]
-    # history['bic_u']   = [bic_u]
-    # history['bfc_l']   = [bfc_l]
-    # history['bfc_u']   = [bfc_u]
-    history['scale_u'] = [scale_u]
-    history['scale_l'] = [scale_l]
-
-    counter = 0
-    scale_this = scale_u # Starting scale
-    # while (bic_u - bic_l) >= 5 and counter <= 20:
-    while (scale_u - scale_l) >= 0.01 and counter <= 20:
-        # ic_this = data['CostInvest'][target_tech, target_year]
-        # fc_this = data['CostFixed'][target_year, target_tech, target_year]
-        scale_this = (scale_u + scale_l)*0.5
-        data['CostInvest'][target_tech, target_year] = scale_this*ic
-        for y in range(2015, 2055, 5):
-            if (y, target_tech, target_year) in data['CostFixed']:
-                data['CostFixed'][y, target_tech, target_year] = fc*scale_this
-        if cap_target <= 0:
-            scale_u = scale_this
-            history['scale_u'].append(scale_u)
-        else:
-            scale_l = scale_this
-            history['scale_l'].append(scale_l)
-        counter += 1
-
-        print 'Iteration # {} starts at {} s'.format( counter, time_mark() )
-        instance = model.create_instance(data)
-        instance.preprocess()
-        results = optimizer.solve(instance, suffixes=['dual', 'urc', 'slack', 'lrc'])
-        instance.solutions.load_from(results)
-        cap_target = value( instance.V_Capacity[target_tech, target_year] )
-        print 'Iteration # {} solved at {} s'.format( counter, time_mark() )
-        print 'Iteration # {}, scale: {:1.2f}, capacity: {} GW'.format( 
-            counter,
-            scale_this,
-            cap_target)
-    return
 
 def do_sensitivity_old():
     scenarios = ['LF', 'R', 'HF', 'CPPLF', 'CPP', 'CPPHF']
@@ -877,7 +981,8 @@ def plot_breakeven(years, bic, ic):
     return ax
 
 if __name__ == "__main__":
-    do_sensitivity_new()
+    # sen_bin_search()
+    sen_range()
+    # do_sensitivity_new()
     # do_sensitivity_old()
     # explore_Cost_marginal(['/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/results/R/NCreference.R.dat'])
-    # sen_iter()
