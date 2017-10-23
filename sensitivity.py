@@ -314,17 +314,17 @@ def sen_range():
             for y in instance.time_optimize:
                 key = str(y)
                 c_vector = return_c_vector(instance, [])
-                coef = c_vector[ ( 'V_Capacity', (target_tech, target_year) )]
-                capacity = value(instance.V_Capacity[target_tech, target_year])
+                coefficient = c_vector[ ( 'V_Capacity', (target_tech, y) )]
+                capacity = value(instance.V_Capacity[target_tech, y])
                 lower_rc = value(
-                    instance.lrc[ instance.V_Capacity[target_tech, target_year] ]
+                    instance.lrc[ instance.V_Capacity[target_tech, y] ]
                 )
                 upper_rc = value(
-                    instance.urc[ instance.V_Capacity[target_tech, target_year] ]
+                    instance.urc[ instance.V_Capacity[target_tech, y] ]
                 )
-                cost_i   = value( instance.CostInvest[target_tech, target_year] )
-                cost_f   = value( instance.CostFixed[target_year, target_tech, target_year] )
-                s_be = ( coef - lower_rc ) / coef # Break-even scale
+                cost_i   = value( instance.CostInvest[target_tech, y] )
+                cost_f   = value( instance.CostFixed[y, target_tech, y] )
+                s_be = ( coefficient - lower_rc ) / coefficient # Break-even scale
 
                 cap_alg[key].append( capacity )
                 lrc_alg[key].append(lower_rc)
