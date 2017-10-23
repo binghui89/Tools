@@ -250,6 +250,7 @@ def sen_range():
     # Given a range of scaling factor for coefficient of a specific V_Capacity, 
     # returns objective value, reduced cost, capacity etc. for each scaling 
     # factor
+    from openpyxl import Workbook
     target_year = 2020
     target_tech = 'ECOALIGCCS'
     dat = ['NCupdated.dat']
@@ -257,8 +258,10 @@ def sen_range():
     algmap = {
         'primal simplex': 1,
         'dual simplex':   2,
-        'barrier':        4
+        'barrier':        4,
+        'default':        0,
     } # cplex definition
+    all_periods = range(2015, 2055, 5)
 
     t0 = time()
     time_mark = lambda: time() - t0 
@@ -278,29 +281,31 @@ def sen_range():
     fc0 = data['CostFixed'][target_year, target_tech, target_year]
 
     optimizer = SolverFactory('cplex')
-    obj = dict()
-    cap = dict()
-    lrc = dict()
-    urc = dict()
-    bic = dict()
-    bfc = dict()
-    ic  = dict() # Original IC
-    fc  = dict() # Original FC
+    obj  = dict()
+    cap  = dict()
+    lrc  = dict()
+    coef = dict()
+    urc  = dict()
+    bic  = dict()
+    bfc  = dict()
+    ic   = dict() # Original IC
+    fc   = dict() # Original FC
 
     for algorithm in ['barrier', 'dual simplex', 'primal simplex']:
         optimizer.options['lpmethod'] = algmap[algorithm]
         print 'Algorithm: {}'.format( algorithm )
 
-        obj_alg = list()
-        cap_alg = defaultdict(list)
-        lrc_alg = defaultdict(list)
-        urc_alg = defaultdict(list)
-        bic_alg = defaultdict(list)
-        bfc_alg = defaultdict(list)
-        ic_alg  = defaultdict(list)
-        fc_alg  = defaultdict(list)
+        obj_alg  = list()
+        cap_alg  = defaultdict(list)
+        lrc_alg  = defaultdict(list)
+        coef_alg = defaultdict(list)
+        urc_alg  = defaultdict(list)
+        bic_alg  = defaultdict(list)
+        bfc_alg  = defaultdict(list)
+        ic_alg   = defaultdict(list)
+        fc_alg   = defaultdict(list)
         for s in scales:
-            print 'Scale: {:>.3f} starts at t = {:>7.2f} s'.format(s, time_mark() )
+            print '[{:>9.2f}] Scale: {:>.3f} starts'.format(time_mark(), s)
             data['CostInvest'][target_tech, target_year] = s*ic0
             for y in data['time_future']:
                 if (y, target_tech, target_year) in data['CostFixed']:
@@ -326,24 +331,58 @@ def sen_range():
                 cost_f   = value( instance.CostFixed[y, target_tech, y] )
                 s_be = ( coefficient - lower_rc ) / coefficient # Break-even scale
 
-                cap_alg[key].append( capacity )
+                cap_alg[key].append(capacity)
                 lrc_alg[key].append(lower_rc)
+                coef_alg[key].append(coefficient)
                 urc_alg[key].append(upper_rc)
                 ic_alg[key].append(cost_i)
                 fc_alg[key].append(cost_f)
                 bic_alg[key].append(s_be*cost_i)
                 bfc_alg[key].append(s_be*cost_f)
 
-            obj[algorithm] = obj_alg
-            cap[algorithm] = cap_alg
-            lrc[algorithm] = lrc_alg
-            urc[algorithm] = urc_alg
-            bic[algorithm] = bic_alg
-            bfc[algorithm] = bfc_alg
-            ic[algorithm]  = ic_alg
-            fc[algorithm]  = fc_alg
-    IP()
+        obj[algorithm]  = obj_alg
+        cap[algorithm]  = cap_alg
+        lrc[algorithm]  = lrc_alg
+        coef[algorithm] = coef_alg
+        urc[algorithm]  = urc_alg
+        bic[algorithm]  = bic_alg
+        bfc[algorithm]  = bfc_alg
+        ic[algorithm]   = ic_alg
+        fc[algorithm]   = fc_alg
 
+        # Write to Excel spreadsheet
+        print '[{:>9.2f}] Saving to Excel spreadsheet'.format( time_mark() )
+        row_title = [
+            'scale', 'obj', 'cap', 'lrc', 'coef', 
+            'urc',   'bic', 'bfc', 'ic',  'fc'
+        ]
+        wb = Workbook()
+        for y in all_periods:
+            ws_title = str(y)
+            ws = wb.create_sheet(ws_title)
+
+            row = [
+                scales, 
+                obj_alg, 
+                cap_alg[ws_title], 
+                lrc_alg[ws_title], 
+                coef_alg[ws_title], 
+                urc_alg[ws_title], 
+                bic_alg[ws_title], 
+                bfc_alg[ws_title], 
+                ic_alg[ws_title], 
+                fc_alg[ws_title]
+            ]
+
+            # Note Python starts from 0, but row number starts from 1
+            for j in range(0, len(row_title) ):
+                c = ws.cell(row = 1, column = j + 1)
+                c.value = row_title[j]
+            for i in range(0, len(scales)):
+                for j in range(0, len(row_title)):
+                    c = ws.cell(row = i + 2, column = j + 1)
+                    c.value = row[j][i]
+        wb.save(algorithm + '.xlsx')
 
 def explore_Cost_marginal(dat):
     from temoa_model import temoa_create_model
