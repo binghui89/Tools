@@ -10,6 +10,23 @@ from IPython import embed as IP
 
 sys.path.append("/afs/unity.ncsu.edu/users/b/bli6/temoa/temoa_model")
 
+def return_Temoa_model():
+    from temoa_model import temoa_create_model
+    model = temoa_create_model()
+
+    model.dual  = Suffix(direction=Suffix.IMPORT)
+    model.rc    = Suffix(direction=Suffix.IMPORT)
+    model.slack = Suffix(direction=Suffix.IMPORT)
+    model.lrc   = Suffix(direction=Suffix.IMPORT)
+    model.urc   = Suffix(direction=Suffix.IMPORT)
+    return model
+
+def return_Temoa_data(model, list_dat):
+    data = DataPortal(model = model)
+    for d in list_dat:
+        data.load(filename=d)
+    return data
+
 def return_c_vector(block, unfixed):
     # Note that this function is adapted function collect_linear_terms defined
     # in pyomo/repn/collect.py.
@@ -165,57 +182,34 @@ def sensitivity(dat, techs):
                 for tod in instance.time_of_day:
                     print p, s, tod, instance.dual[instance.DemandConstraint[p,s,tod,c]], instance.slack[instance.DemandConstraint[p,s,tod,c]]
 
-def sen_bin_search():
+def sen_bin_search(tech, vintage, dat, eps = 0.01):
     # Sensitivity analysis by binary search to find break-even cost
-    # years, bic_s, ic_s, cap_s = sensitivity(dat, techs)
-    target_year = 2020
-    target_tech = 'ECOALIGCCS'
-    dat = ['NCupdated.dat']
-    # dat = ['/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20151124/reference.dat']
-    epsilon = 5
+    target_year = vintage
+    target_tech = tech
 
     t0 = time()
     time_mark = lambda: time() - t0 
-    from temoa_model import temoa_create_model
-    model = temoa_create_model()
     
-    model.dual  = Suffix(direction=Suffix.IMPORT)
-    model.rc    = Suffix(direction=Suffix.IMPORT)
-    model.slack = Suffix(direction=Suffix.IMPORT)
-    model.lrc   = Suffix(direction=Suffix.IMPORT)
-    model.urc   = Suffix(direction=Suffix.IMPORT)
-
+    model = return_Temoa_model()
     optimizer = SolverFactory('cplex')
-    optimizer.options['lpmethod'] = 2 # Use dual simplex
-
-    data = DataPortal(model = model)
-    for d in dat:
-        data.load(filename=d)
+    data = return_Temoa_data(model, dat)
     instance = model.create_instance(data)
 
-    ic = data['CostInvest'][target_tech, target_year]
-    fc = data['CostFixed'][target_year, target_tech, target_year]
+    ic          = data['CostInvest'][target_tech, target_year]
+    fc          = data['CostFixed'][target_year, target_tech, target_year]
+    all_periods = data['time_future']
 
-    # bic_u = data['CostInvest'][target_tech, target_year]
-    # bfc_u = data['CostFixed'][target_year, target_tech, target_year]
-    # bic_l = 0
-    # bfc_l = 0
     cap_target = 0
     scale_u = 1.0
     scale_l = 0.0
 
     history = dict()
-    # history['bic_l']   = [bic_l]
-    # history['bic_u']   = [bic_u]
-    # history['bfc_l']   = [bfc_l]
-    # history['bfc_u']   = [bfc_u]
     history['scale_u'] = [scale_u]
     history['scale_l'] = [scale_l]
 
     counter = 0
     scale_this = scale_u # Starting scale
-    # while (bic_u - bic_l) >= 5 and counter <= 20:
-    while (scale_u - scale_l) >= 0.01 and counter <= 20:
+    while (scale_u - scale_l) >= eps and counter <= 20:
         # ic_this = data['CostInvest'][target_tech, target_year]
         # fc_this = data['CostFixed'][target_year, target_tech, target_year]
         if cap_target <= 0:
@@ -228,10 +222,9 @@ def sen_bin_search():
 
         scale_this = (scale_u + scale_l)*0.5
         data['CostInvest'][target_tech, target_year] = scale_this*ic
-        for y in range(2015, 2055, 5):
+        for y in all_periods:
             if (y, target_tech, target_year) in data['CostFixed']:
                 data['CostFixed'][y, target_tech, target_year] = fc*scale_this
-
 
         print 'Iteration # {} starts at {} s'.format( counter, time_mark() )
         instance = model.create_instance(data)
@@ -246,41 +239,31 @@ def sen_bin_search():
             cap_target)
     return
 
-def sen_range():
+def sen_range(tech, vintage, scales, dat):
     # Given a range of scaling factor for coefficient of a specific V_Capacity, 
     # returns objective value, reduced cost, capacity etc. for each scaling 
     # factor
     from openpyxl import Workbook
-    target_year = 2020
-    target_tech = 'ECOALIGCCS'
-    dat = ['NCupdated.dat']
-    scales = [ 0.001* i for i in range(150, 305, 5) ]
+    target_year = vintage
+    target_tech = tech
     algmap = {
         'primal simplex': 1,
         'dual simplex':   2,
         'barrier':        4,
         'default':        0,
     } # cplex definition
-    all_periods = range(2015, 2055, 5)
 
     t0 = time()
-    time_mark = lambda: time() - t0 
-    from temoa_model import temoa_create_model
-    model = temoa_create_model()
-    
-    model.dual  = Suffix(direction=Suffix.IMPORT)
-    model.rc    = Suffix(direction=Suffix.IMPORT)
-    model.slack = Suffix(direction=Suffix.IMPORT)
-    model.lrc   = Suffix(direction=Suffix.IMPORT)
-    model.urc   = Suffix(direction=Suffix.IMPORT)
+    time_mark = lambda: time() - t0
 
-    data = DataPortal(model = model)
-    for d in dat:
-        data.load(filename=d)
-    ic0 = data['CostInvest'][target_tech, target_year]
-    fc0 = data['CostFixed'][target_year, target_tech, target_year]
-
+    model = return_Temoa_model()
+    data = return_Temoa_data(model, dat)
     optimizer = SolverFactory('cplex')
+
+    ic0         = data['CostInvest'][target_tech, target_year]
+    fc0         = data['CostFixed'][target_year, target_tech, target_year]
+    all_periods = data['time_future']
+
     obj  = dict()
     cap  = dict()
     lrc  = dict()
@@ -357,8 +340,7 @@ def sen_range():
             'urc',   'bic', 'bfc', 'ic',  'fc'
         ]
         wb = Workbook()
-        for y in all_periods:
-            ws_title = str(y)
+        for ws_title in cap_alg:
             ws = wb.create_sheet(ws_title)
 
             row = [
@@ -382,7 +364,8 @@ def sen_range():
                 for j in range(0, len(row_title)):
                     c = ws.cell(row = i + 2, column = j + 1)
                     c.value = row[j][i]
-        wb.save(algorithm + '.xlsx')
+        fname = '.'.join( [algorithm] + dat + [target_tech, str(target_year)] )
+        wb.save(fname + '.xlsx')
 
 def explore_Cost_marginal(dat):
     from temoa_model import temoa_create_model
@@ -1020,8 +1003,19 @@ def plot_breakeven(years, bic, ic):
     return ax
 
 if __name__ == "__main__":
-    # sen_bin_search()
-    sen_range()
+    # sen_bin_search(
+    #     'ECOALIGCCS', 
+    #     2020,
+    #     ['reference.dat'],
+    #     0.01
+    # )
+    scales = [0.001* i for i in range(250, 260, 10)]
+    sen_range(
+        'ECOALIGCCS', 
+        2020,
+        scales,
+        ['reference.dat']
+    )
     # do_sensitivity_new()
     # do_sensitivity_old()
     # explore_Cost_marginal(['/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/results/R/NCreference.R.dat'])
