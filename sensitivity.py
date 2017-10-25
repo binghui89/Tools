@@ -340,7 +340,11 @@ def sen_range(tech, vintage, scales, dat):
             'urc',   'bic', 'bfc', 'ic',  'fc'
         ]
         wb = Workbook()
-        for ws_title in cap_alg:
+        # for ws_title in cap_alg:
+        for year in all_periods:
+            ws_title = str(year)
+            if ws_title not in cap_alg:
+                continue
             ws = wb.create_sheet(ws_title)
 
             row = [
@@ -364,7 +368,11 @@ def sen_range(tech, vintage, scales, dat):
                 for j in range(0, len(row_title)):
                     c = ws.cell(row = i + 2, column = j + 1)
                     c.value = row[j][i]
-        fname = '.'.join( [algorithm] + dat + [target_tech, str(target_year)] )
+        fname = '.'.join(
+            [target_tech, str(target_year)]
+            + [ i[:-4] for i in dat ] # Remove the .dat extension
+            + [algorithm]
+        ) # tech_name.year.dat_file_name.algorithm.xlsx
         wb.save(fname + '.xlsx')
 
 def explore_Cost_marginal(dat):
