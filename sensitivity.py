@@ -182,22 +182,45 @@ def sensitivity(dat, techs):
                 for tod in instance.time_of_day:
                     print p, s, tod, instance.dual[instance.DemandConstraint[p,s,tod,c]], instance.slack[instance.DemandConstraint[p,s,tod,c]]
 
-def sen_bin_search(tech, vintage, dat, eps = 0.01):
-    # Sensitivity analysis by binary search to find break-even cost
-    target_year = vintage
-    target_tech = tech
+def bin_search(tech, vintage, dat, eps = 0.01, all_v = False):
+    # Sensitivity analysis by binary search to find break-even scaling factor 
+    # for a technology.
+    # tech     -> Target technology.
+    # vintage  -> Target vintage. It is break-even when capacity in this year >= 0 
+    # dat      -> A list of .dat files.
+    # eps      -> Convergence tolerance
+    # all_v    -> A flag used indicate the costs of which vintages are subject 
+    # to change. If it is FALSE, then only the investment costs and fixed costs
+    # in the target vintage will be altered, otherwise all vintages are affected
+    # Note that, only the capacity in the target vintage will be monitored and 
+    # be used as the signal of break-even.
+    monitor_year = vintage
+    monitor_tech = tech
 
     t0 = time()
     time_mark = lambda: time() - t0 
-    
+
     model = return_Temoa_model()
     optimizer = SolverFactory('cplex')
     data = return_Temoa_data(model, dat)
     instance = model.create_instance(data)
 
-    ic          = data['CostInvest'][target_tech, target_year]
-    fc          = data['CostFixed'][target_year, target_tech, target_year]
-    all_periods = data['time_future']
+    time_optimize = [ i for i in data['time_future'] ]
+    time_optimize.sort()
+    ic0 = dict()
+    fc0 = dict()
+    if all_v:
+        for v in time_optimize:
+            if (monitor_tech, v) in data['CostInvest']:
+                ic0[monitor_tech, v] = data['CostInvest'][monitor_tech, v]
+                for p in time_optimize:
+                    if (p, monitor_tech, v) in data['CostFixed']:
+                        fc0[p, monitor_tech, v] = data['CostFixed'][p, monitor_tech, v]
+    else:
+        ic0[monitor_tech, monitor_year] = data['CostInvest'][monitor_tech, monitor_year]
+        for p in time_optimize:
+            if (p, monitor_tech, monitor_year) in data['CostFixed']:
+                fc0[p, monitor_tech, monitor_year] = data['CostFixed'][p, monitor_tech, monitor_year]
 
     cap_target = 0
     scale_u = 1.0
@@ -210,8 +233,6 @@ def sen_bin_search(tech, vintage, dat, eps = 0.01):
     counter = 0
     scale_this = scale_u # Starting scale
     while (scale_u - scale_l) >= eps and counter <= 20:
-        # ic_this = data['CostInvest'][target_tech, target_year]
-        # fc_this = data['CostFixed'][target_year, target_tech, target_year]
         if cap_target <= 0:
             scale_u = scale_this
             history['scale_u'].append(scale_u)
@@ -221,17 +242,17 @@ def sen_bin_search(tech, vintage, dat, eps = 0.01):
         counter += 1
 
         scale_this = (scale_u + scale_l)*0.5
-        data['CostInvest'][target_tech, target_year] = scale_this*ic
-        for y in all_periods:
-            if (y, target_tech, target_year) in data['CostFixed']:
-                data['CostFixed'][y, target_tech, target_year] = fc*scale_this
+        for k in ic0:
+            data['CostInvest'][k] = scale_this*ic0[k]
+        for k in fc0:
+            data['CostFixed'][k] = scale_this*fc0[k]
 
         print 'Iteration # {} starts at {} s'.format( counter, time_mark() )
         instance = model.create_instance(data)
         instance.preprocess()
         results = optimizer.solve(instance, suffixes=['dual', 'urc', 'slack', 'lrc'])
         instance.solutions.load_from(results)
-        cap_target = value( instance.V_Capacity[target_tech, target_year] )
+        cap_target = value( instance.V_Capacity[monitor_tech, monitor_year] )
         print 'Iteration # {} solved at {} s'.format( counter, time_mark() )
         print 'Iteration # {}, scale: {:1.2f}, capacity: {} GW'.format( 
             counter,
