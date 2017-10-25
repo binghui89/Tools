@@ -12444,4 +12444,56 @@ CREATE TABLE RampDown (
 INSERT INTO "RampDown" VALUES('ECOALSTM', 0.42);
 INSERT INTO "RampDown" VALUES('ECOASTMR', 0.42);
 
+-------------------------------------------------
+CREATE TABLE tech_lead (
+  tech text primary key,
+  FOREIGN KEY(tech) REFERENCES technologies(tech));
+INSERT INTO "tech_lead" VALUES('ENGACC05');
+INSERT INTO "tech_lead" VALUES('ENGACT05');
+INSERT INTO "tech_lead" VALUES('ENGAACC');
+INSERT INTO "tech_lead" VALUES('ENGAACT');
+INSERT INTO "tech_lead" VALUES('ENGACCCCS');
+INSERT INTO "tech_lead" VALUES('ECOALSTM');
+INSERT INTO "tech_lead" VALUES('ECOALSTMCCS');
+INSERT INTO "tech_lead" VALUES('ECOALIGCC');
+INSERT INTO "tech_lead" VALUES('ECOALIGCCS');
+INSERT INTO "tech_lead" VALUES('ECOALSTM_b');
+INSERT INTO "tech_lead" VALUES('ECOALIGCC_b');
+INSERT INTO "tech_lead" VALUES('ECOALIGCCS_b');
+INSERT INTO "tech_lead" VALUES('EURNALWR15');
+INSERT INTO "tech_lead" VALUES('EBIOIGCC');
+INSERT INTO "tech_lead" VALUES('EGEOBCFS');
+INSERT INTO "tech_lead" VALUES('ESOLPVCEN');
+INSERT INTO "tech_lead" VALUES('ESOLSTCEN');
+INSERT INTO "tech_lead" VALUES('ESOLPVDIS');
+INSERT INTO "tech_lead" VALUES('EWNDON');
+INSERT INTO "tech_lead" VALUES('EWNDOFS');
+
+-------------------------------------------------
+CREATE TABLE LeadTimeTech (
+  tech text primary key,
+  lead_time_tech real,
+  FOREIGN KEY(tech) REFERENCES tech_lead(tech));
+INSERT INTO "LeadTimeTech" VALUES('ENGACC05',      5);
+INSERT INTO "LeadTimeTech" VALUES('ENGACT05',      0);
+INSERT INTO "LeadTimeTech" VALUES('ENGAACC',       5);
+INSERT INTO "LeadTimeTech" VALUES('ENGAACT',       0);
+INSERT INTO "LeadTimeTech" VALUES('ENGACCCCS',     5);
+INSERT INTO "LeadTimeTech" VALUES('ECOALSTM',      5);
+INSERT INTO "LeadTimeTech" VALUES('ECOALSTMCCS',   5);
+INSERT INTO "LeadTimeTech" VALUES('ECOALIGCC',     5);
+INSERT INTO "LeadTimeTech" VALUES('ECOALIGCCS',    5);
+INSERT INTO "LeadTimeTech" VALUES('ECOALSTM_b',    5);
+INSERT INTO "LeadTimeTech" VALUES('ECOALIGCC_b',   5);
+INSERT INTO "LeadTimeTech" VALUES('ECOALIGCCS_b',  5);
+INSERT INTO "LeadTimeTech" VALUES('EURNALWR15',   10);
+INSERT INTO "LeadTimeTech" VALUES('EBIOIGCC',      5);
+INSERT INTO "LeadTimeTech" VALUES('EGEOBCFS',      5);
+INSERT INTO "LeadTimeTech" VALUES('ESOLPVCEN',     0);
+INSERT INTO "LeadTimeTech" VALUES('ESOLSTCEN',     5);
+INSERT INTO "LeadTimeTech" VALUES('ESOLPVDIS',     0);
+INSERT INTO "LeadTimeTech" VALUES('EWNDON',        5);
+INSERT INTO "LeadTimeTech" VALUES('EWNDOFS',       5);
+
+
 COMMIT;
