@@ -258,7 +258,7 @@ def bin_search(tech, vintage, dat, eps = 0.01, all_v = False):
             counter,
             scale_this,
             cap_target)
-    return
+    return (scale_u + scale_l)/2.0
 
 def sen_range(tech, vintage, scales, dat):
     # Given a range of scaling factor for coefficient of a specific V_Capacity, 
@@ -1030,6 +1030,31 @@ def plot_breakeven(years, bic, ic):
     plt.ylabel('$/MWh')
     plt.xlim( ( years[0]-5, years[-1]+5 ) )
     return ax
+
+def bin_search_and_range():
+    def return_range(bs):
+        # Given break-even scaling factor, return an appropriate range
+        ub = None
+        lb = None
+        if bs >= 0.85:
+            lb = int(bs*100) - 15
+            ub = 100
+        elif bs <= 0.15:
+            lb = 1
+            ub = int(bs*100) + 15
+        else:
+            lb = int(bs*100) - 15
+            ub = int(bs*100) + 15
+        return [0.001*i for i in range(lb*10, ub*10, 10)]
+
+    list_file = ['reference.dat', 'NCupdated_noLeadTime.dat']
+    list_tech = ['EBIOIGCC', 'EURNALWR15']
+    monitor_vintage = 2020
+    eps = 0.01
+    for f in list_file:
+        for t in list_tech:
+            bs = bin_search(t, monitor_vintage, [f], eps)
+            sen_range( t, monitor_vintage, return_range(bs), [f] )
 
 if __name__ == "__main__":
     # sen_bin_search(
