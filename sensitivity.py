@@ -1,7 +1,7 @@
 from pyomo.environ import *
 from pyomo.core import Constraint
 from pyomo.opt import SolverFactory
-import sys, xlsxwriter
+import sys, xlsxwriter, os
 from matplotlib import pyplot as plt
 import numpy as np
 from collections import OrderedDict, defaultdict
@@ -9,6 +9,7 @@ from time import time
 from IPython import embed as IP
 
 sys.path.append("/afs/unity.ncsu.edu/users/b/bli6/temoa/temoa_model")
+sys.path.append('/opt/ibm/ILOG/CPLEX_Studio1263/cplex/python/2.6/x86-64_linux')
 
 def return_Temoa_model():
     from temoa_model import temoa_create_model
@@ -259,6 +260,176 @@ def bin_search(tech, vintage, dat, eps = 0.01, all_v = False):
             scale_this,
             cap_target)
     return (scale_u + scale_l)/2.0
+
+def sen_range_api(tech, vintage, scales, list_dat):
+    # This function is adapted from CPLEX's example script lpex2.py
+    # It does the same thing as sen_range, but with CPLEX API for Python
+
+    def validate_coef():
+        pass
+
+    # Given a range of scaling factor for coefficient of a specific V_Capacity, 
+    # returns objective value, reduced cost, capacity etc. for each scaling 
+    # factor
+    from openpyxl import Workbook
+    import cplex
+    target_year = vintage
+    target_tech = tech
+    target_var0 = 'V_Capacity(' + target_tech + '_' + str(target_year) + ')'
+    algmap = {
+        'primal simplex': 'o',
+        'dual simplex':   'p',
+        'barrier':        'd',
+        'default':        'b',
+    } # cplex definition
+
+    t0 = time()
+    time_mark = lambda: time() - t0
+
+    model = return_Temoa_model()
+    data = return_Temoa_data(model, list_dat)
+    instance = model.create_instance(data)
+    instance.write('tmp.lp', io_options={'symbolic_solver_labels':True})
+
+    c = cplex.Cplex('tmp.lp')
+    c.set_results_stream(None) # Turn screen output off
+    alg = c.parameters.lpmethod.values
+    c0 = c.objective.get_linear(target_var0)
+
+    ic0         = data['CostInvest'][target_tech, target_year]
+    fc0         = data['CostFixed'][target_year, target_tech, target_year]
+    all_periods = data['time_future']
+
+    obj  = dict()
+    cap  = dict()
+    coef = dict()
+    bic  = dict()
+    bfc  = dict()
+    ic   = dict() # Original IC
+    fc   = dict() # Original FC
+    clb  = dict() # Lower bound of objective coefficient
+    cub  = dict() # Upper bound of objective coefficient
+    rc   = dict() # Reduced cost
+
+    for algorithm in ['barrier', 'dual simplex', 'primal simplex']:
+        if algmap[algorithm] == "o":
+            c.parameters.lpmethod.set(alg.auto)
+        elif algmap[algorithm] == "p":
+            c.parameters.lpmethod.set(alg.primal)
+        elif algmap[algorithm] == "d":
+            c.parameters.lpmethod.set(alg.dual)
+        elif algmap[algorithm] == "b":
+            c.parameters.lpmethod.set(alg.barrier)
+            c.parameters.barrier.crossover.set(
+                c.parameters.barrier.crossover.values.none)
+        elif algmap[algorithm] == "h":
+            c.parameters.lpmethod.set(alg.barrier)
+        elif algmap[algorithm] == "s":
+            c.parameters.lpmethod.set(alg.sifting)
+        elif algmap[algorithm] == "c":
+            c.parameters.lpmethod.set(alg.concurrent)
+        else:
+            raise ValueError(
+                'method must be one of "o", "p", "d", "b", "h", "s" or "c"')
+
+        print 'Algorithm: {}'.format( algorithm )
+
+        obj_alg  = list()
+        cap_alg  = defaultdict(list)
+        coef_alg = defaultdict(list)
+        bic_alg  = defaultdict(list)
+        bfc_alg  = defaultdict(list)
+        ic_alg   = defaultdict(list)
+        fc_alg   = defaultdict(list)
+        clb_alg  = defaultdict(list)
+        cub_alg  = defaultdict(list)
+        rc_alg   = defaultdict(list)
+        for s in scales:
+            print '[{:>9.2f}] Scale: {:>.3f} starts'.format(time_mark(), s)
+            c.objective.set_linear(target_var0, s*c0)
+
+            try:
+                c.solve()
+            except CplexSolverError:
+                print("Exception raised during solve")
+                return
+
+            obj_alg.append( c.solution.get_objective_value() )
+            for y in instance.time_optimize:
+                key = str(y)
+                target_var   = 'V_Capacity(' + target_tech + '_' + key + ')'
+                coefficient  = c.objective.get_linear(target_var)
+                capacity     = c.solution.get_values(target_var)
+                c_bound      = c.solution.sensitivity.objective(target_var)
+                cost_i       = s*value( instance.CostInvest[target_tech, y] )
+                cost_f       = s*value( instance.CostFixed[y, target_tech, y] )
+                s_be         = c_bound[0] / coefficient # Break-even scale
+
+                cap_alg[key].append(capacity)
+                coef_alg[key].append(coefficient)
+                ic_alg[key].append(cost_i)
+                fc_alg[key].append(cost_f)
+                bic_alg[key].append(s_be*cost_i)
+                bfc_alg[key].append(s_be*cost_f)
+                clb_alg[key].append( c_bound[0] )
+                cub_alg[key].append( c_bound[1] )
+                rc_alg[key].append( c.solution.get_reduced_costs(target_var) )
+
+        obj[algorithm]  = obj_alg
+        cap[algorithm]  = cap_alg
+        coef[algorithm] = coef_alg
+        bic[algorithm]  = bic_alg
+        bfc[algorithm]  = bfc_alg
+        ic[algorithm]   = ic_alg
+        fc[algorithm]   = fc_alg
+        clb[algorithm]  = clb_alg
+        cub[algorithm]  = cub_alg
+        rc[algorithm]   = rc_alg
+
+        # Write to Excel spreadsheet
+        print '[{:>9.2f}] Saving to Excel spreadsheet'.format( time_mark() )
+        row_title = [
+            'scale',       'obj',       'cap', 'clb', 'coef', 
+            'cub',   'bic (clb)', 'bfc (clb)',  'ic',   'fc',
+            'rc'
+        ]
+        wb = Workbook()
+        # for ws_title in cap_alg:
+        for year in all_periods:
+            ws_title = str(year)
+            if ws_title not in cap_alg:
+                continue
+            ws = wb.create_sheet(ws_title)
+
+            row = [
+                scales, 
+                obj_alg, 
+                cap_alg[ws_title], 
+                clb_alg[ws_title], 
+                coef_alg[ws_title], 
+                cub_alg[ws_title], 
+                bic_alg[ws_title], 
+                bfc_alg[ws_title], 
+                ic_alg[ws_title], 
+                fc_alg[ws_title],
+                rc_alg[ws_title]
+            ]
+
+            # Note Python starts from 0, but row number starts from 1
+            for j in range(0, len(row_title) ):
+                cell = ws.cell(row = 1, column = j + 1)
+                cell.value = row_title[j]
+            for i in range(0, len(scales)):
+                for j in range(0, len(row_title)):
+                    cell = ws.cell(row = i + 2, column = j + 1)
+                    cell.value = row[j][i]
+        fname = '.'.join(
+            [target_tech, str(target_year)]
+            + [ i[:-4] for i in list_dat ] # Remove the .dat extension
+            + [algorithm]
+        ) # tech_name.year.dat_file_name.algorithm.xlsx
+        wb.save(fname + '.xlsx')
+    os.remove('tmp.lp')
 
 def sen_range(tech, vintage, scales, dat):
     # Given a range of scaling factor for coefficient of a specific V_Capacity, 
