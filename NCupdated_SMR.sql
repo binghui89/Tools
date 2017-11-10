@@ -104,7 +104,8 @@ CREATE TABLE technologies (
 
    INSERT INTO "technologies" VALUES('IMPELCNGAEA',     'r', 'supply',      '# Import NG to combined cycle', 'natural gas');
    INSERT INTO "technologies" VALUES('IMPELCDSLEA',     'r', 'supply',      '# Import diesel', 'diesel');
-   INSERT INTO "technologies" VALUES('IMPURNA',         'r', 'supply',      '# Import uranium','uranium');
+   INSERT INTO "technologies" VALUES('IMPURNA',         'r', 'supply',      '# Import uranium @ 4.5% enrichment level','uranium');
+   INSERT INTO "technologies" VALUES('IMPURN5',         'r', 'supply',      '# Import uranium @ 5% enrichment level','uranium');
    INSERT INTO "technologies" VALUES('IMPELCBIGCCEA',   'r', 'supply',      '# Import biomass to IGCC','biomass');
    INSERT INTO "technologies" VALUES('IMPELCBIOSTM',    'r', 'supply',      '# Import biomass to steam','biomass');
    INSERT INTO "technologies" VALUES('IMPELCGEO',       'r', 'supply',      '# Import geothermal','geothermal');
@@ -219,6 +220,7 @@ INSERT INTO "commodities" VALUES('ELCNGAEA',  'p', '# NG');
 INSERT INTO "commodities" VALUES('ELCDSLEA',  'p', '# Diesel');
 -- INSERT INTO "commodities" VALUES('ELCRFLEA', 'p', '# Residual fuel oil');
 INSERT INTO "commodities" VALUES('URNA',    'p', '# Uranium');
+INSERT INTO "commodities" VALUES('URN5',    'p', '# Uranium @ 5% enrichment level');
 INSERT INTO "commodities" VALUES('ELCBIGCCEA',  'p', '# Biomass to IGCC');
 INSERT INTO "commodities" VALUES('ELCBIOSTM', 'p', '# Biomass to steam');
 INSERT INTO "commodities" VALUES('ELCGEO',    'p', '# Geothermal');
@@ -391,6 +393,7 @@ CREATE TABLE Efficiency (
    INSERT INTO "Efficiency" VALUES('ethos','IMPELCDSLEA',   2015,'ELCDSLEA',    1.00,'');
 -- INSERT INTO "Efficiency" VALUES('ethos','IMPELCRFLEA',   2015,'ELCRFLEA',    1.00,'');
    INSERT INTO "Efficiency" VALUES('ethos','IMPURNA',       2015,'URNA',        1.00,'');
+   INSERT INTO "Efficiency" VALUES('ethos','IMPURN5',       2015,'URN5',        1.00,'# Import and enrich 5% uranium');
    INSERT INTO "Efficiency" VALUES('ethos','IMPELCBIGCCEA', 2015,'ELCBIGCCEA',  1.00,'');
    INSERT INTO "Efficiency" VALUES('ethos','IMPELCBIOSTM',  2015,'ELCBIOSTM',   1.00,'');
    INSERT INTO "Efficiency" VALUES('ethos','IMPELCGEO',     2015,'ELCGEO',      1.00,'');
@@ -573,14 +576,14 @@ INSERT INTO "Efficiency" VALUES('URNA', 'EURNALWR15', 2040,'ELC',1.268,'# PJ/ton
 INSERT INTO "Efficiency" VALUES('URNA', 'EURNALWR15', 2045,'ELC',1.268,'# PJ/ton = 45 GWd/ton, 32.6% efficiency (EIA)');
 INSERT INTO "Efficiency" VALUES('URNA', 'EURNALWR15', 2050,'ELC',1.268,'# PJ/ton = 45 GWd/ton, 32.6% efficiency (EIA)');
 
-INSERT INTO "Efficiency" VALUES('URNA', 'EURNSMR', 2015,'ELC',1.488,'# PJ/ton, capacity weighted efficiency of mPower, Westinghouse SMR and NuScale');
-INSERT INTO "Efficiency" VALUES('URNA', 'EURNSMR', 2020,'ELC',1.488,'# PJ/ton, capacity weighted efficiency of mPower, Westinghouse SMR and NuScale');
-INSERT INTO "Efficiency" VALUES('URNA', 'EURNSMR', 2025,'ELC',1.488,'# PJ/ton, capacity weighted efficiency of mPower, Westinghouse SMR and NuScale');
-INSERT INTO "Efficiency" VALUES('URNA', 'EURNSMR', 2030,'ELC',1.488,'# PJ/ton, capacity weighted efficiency of mPower, Westinghouse SMR and NuScale');
-INSERT INTO "Efficiency" VALUES('URNA', 'EURNSMR', 2035,'ELC',1.488,'# PJ/ton, capacity weighted efficiency of mPower, Westinghouse SMR and NuScale');
-INSERT INTO "Efficiency" VALUES('URNA', 'EURNSMR', 2040,'ELC',1.488,'# PJ/ton, capacity weighted efficiency of mPower, Westinghouse SMR and NuScale');
-INSERT INTO "Efficiency" VALUES('URNA', 'EURNSMR', 2045,'ELC',1.488,'# PJ/ton, capacity weighted efficiency of mPower, Westinghouse SMR and NuScale');
-INSERT INTO "Efficiency" VALUES('URNA', 'EURNSMR', 2050,'ELC',1.488,'# PJ/ton, capacity weighted efficiency of mPower, Westinghouse SMR and NuScale');
+INSERT INTO "Efficiency" VALUES('URN5', 'EURNSMR', 2015,'ELC',1.693,'# PJ/ton, capacity weighted efficiency of Westinghouse SMR');
+INSERT INTO "Efficiency" VALUES('URN5', 'EURNSMR', 2020,'ELC',1.693,'# PJ/ton, capacity weighted efficiency of Westinghouse SMR');
+INSERT INTO "Efficiency" VALUES('URN5', 'EURNSMR', 2025,'ELC',1.693,'# PJ/ton, capacity weighted efficiency of Westinghouse SMR');
+INSERT INTO "Efficiency" VALUES('URN5', 'EURNSMR', 2030,'ELC',1.693,'# PJ/ton, capacity weighted efficiency of Westinghouse SMR');
+INSERT INTO "Efficiency" VALUES('URN5', 'EURNSMR', 2035,'ELC',1.693,'# PJ/ton, capacity weighted efficiency of Westinghouse SMR');
+INSERT INTO "Efficiency" VALUES('URN5', 'EURNSMR', 2040,'ELC',1.693,'# PJ/ton, capacity weighted efficiency of Westinghouse SMR');
+INSERT INTO "Efficiency" VALUES('URN5', 'EURNSMR', 2045,'ELC',1.693,'# PJ/ton, capacity weighted efficiency of Westinghouse SMR');
+INSERT INTO "Efficiency" VALUES('URN5', 'EURNSMR', 2050,'ELC',1.693,'# PJ/ton, capacity weighted efficiency of Westinghouse SMR');
 
 -- Biomass, both existing and future
 INSERT INTO "Efficiency" VALUES('ELCBIGCCEA', 'EBIOIGCC', 2015,'ELCRNWB',0.253,'# MARKAL 2014 v1.1');
@@ -9241,15 +9244,25 @@ CREATE TABLE CostVariable (
    INSERT INTO "CostVariable" VALUES(2045,'IMPELCDSLEA',2015,22.88,'M$/PJ','AEO2017 Tab 3, national electric fuel prices, south atlantic region, 2015 $');
    INSERT INTO "CostVariable" VALUES(2050,'IMPELCDSLEA',2015,23.80,'M$/PJ','AEO2017 Tab 3, national electric fuel prices, south atlantic region, 2015 $');
 
--- Importing reactor-ready uranium @ 4.5% enrichment, includes disposal fees
-INSERT INTO "CostVariable" VALUES(2015,'IMPURNA',2015,2.809,'M$/ton','# From Nuclear Energy Institute & World Nuclear Association, $7.98/MWh');
-INSERT INTO "CostVariable" VALUES(2020,'IMPURNA',2015,2.809,'M$/ton','# From Nuclear Energy Institute & World Nuclear Association, $7.98/MWh');
-INSERT INTO "CostVariable" VALUES(2025,'IMPURNA',2015,2.809,'M$/ton','# From Nuclear Energy Institute & World Nuclear Association, $7.98/MWh');
-INSERT INTO "CostVariable" VALUES(2030,'IMPURNA',2015,2.809,'M$/ton','# From Nuclear Energy Institute & World Nuclear Association, $7.98/MWh');
-INSERT INTO "CostVariable" VALUES(2035,'IMPURNA',2015,2.809,'M$/ton','# From Nuclear Energy Institute & World Nuclear Association, $7.98/MWh');
-INSERT INTO "CostVariable" VALUES(2040,'IMPURNA',2015,2.809,'M$/ton','# From Nuclear Energy Institute & World Nuclear Association, $7.98/MWh');
-INSERT INTO "CostVariable" VALUES(2045,'IMPURNA',2015,2.809,'M$/ton','# From Nuclear Energy Institute & World Nuclear Association, $7.98/MWh');
-INSERT INTO "CostVariable" VALUES(2050,'IMPURNA',2015,2.809,'M$/ton','# From Nuclear Energy Institute & World Nuclear Association, $7.98/MWh');
+-- Importing reactor-ready uranium @ 4.5% enrichment
+INSERT INTO "CostVariable" VALUES(2015,'IMPURNA',2015,1.297,'M$/tonIHM','# From EIA uranium prices and MARKAL 2016');
+INSERT INTO "CostVariable" VALUES(2020,'IMPURNA',2015,1.297,'M$/tonIHM','# From EIA uranium prices and MARKAL 2016');
+INSERT INTO "CostVariable" VALUES(2025,'IMPURNA',2015,1.297,'M$/tonIHM','# From EIA uranium prices and MARKAL 2016');
+INSERT INTO "CostVariable" VALUES(2030,'IMPURNA',2015,1.297,'M$/tonIHM','# From EIA uranium prices and MARKAL 2016');
+INSERT INTO "CostVariable" VALUES(2035,'IMPURNA',2015,1.297,'M$/tonIHM','# From EIA uranium prices and MARKAL 2016');
+INSERT INTO "CostVariable" VALUES(2040,'IMPURNA',2015,1.297,'M$/tonIHM','# From EIA uranium prices and MARKAL 2016');
+INSERT INTO "CostVariable" VALUES(2045,'IMPURNA',2015,1.297,'M$/tonIHM','# From EIA uranium prices and MARKAL 2016');
+INSERT INTO "CostVariable" VALUES(2050,'IMPURNA',2015,1.297,'M$/tonIHM','# From EIA uranium prices and MARKAL 2016');
+
+-- Importing reactor-ready uranium @ 5% enrichment for SMR units
+INSERT INTO "CostVariable" VALUES(2015,'IMPURN5',2015,1.431,'M$/tonIHM','# From EIA uranium prices and MARKAL 2016');
+INSERT INTO "CostVariable" VALUES(2020,'IMPURN5',2015,1.431,'M$/tonIHM','# From EIA uranium prices and MARKAL 2016');
+INSERT INTO "CostVariable" VALUES(2025,'IMPURN5',2015,1.431,'M$/tonIHM','# From EIA uranium prices and MARKAL 2016');
+INSERT INTO "CostVariable" VALUES(2030,'IMPURN5',2015,1.431,'M$/tonIHM','# From EIA uranium prices and MARKAL 2016');
+INSERT INTO "CostVariable" VALUES(2035,'IMPURN5',2015,1.431,'M$/tonIHM','# From EIA uranium prices and MARKAL 2016');
+INSERT INTO "CostVariable" VALUES(2040,'IMPURN5',2015,1.431,'M$/tonIHM','# From EIA uranium prices and MARKAL 2016');
+INSERT INTO "CostVariable" VALUES(2045,'IMPURN5',2015,1.431,'M$/tonIHM','# From EIA uranium prices and MARKAL 2016');
+INSERT INTO "CostVariable" VALUES(2050,'IMPURN5',2015,1.431,'M$/tonIHM','# From EIA uranium prices and MARKAL 2016');
 
 -- Importing biogass
 INSERT INTO "CostVariable" VALUES(2015,'IMPELCBIGCCEA',2015,3.39,'M$/PJ','# From Samaneh NUSTD');
@@ -9955,6 +9968,7 @@ CREATE TABLE  LifetimeTech (
   INSERT INTO "LifetimeTech" VALUES('IMPELCDSLEA',  1000,'');
 -- INSERT INTO "LifetimeTech" VALUES('IMPELCRFLEA',  1000,'');
    INSERT INTO "LifetimeTech" VALUES('IMPURNA',      1000,'');
+   INSERT INTO "LifetimeTech" VALUES('IMPURN5',      1000,'');
    INSERT INTO "LifetimeTech" VALUES('IMPELCBIGCCEA',1000,'');
    INSERT INTO "LifetimeTech" VALUES('IMPELCBIOSTM', 1000,'');
    INSERT INTO "LifetimeTech" VALUES('IMPELCGEO',    1000,'');
