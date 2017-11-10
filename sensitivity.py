@@ -265,9 +265,56 @@ def sen_range_api(tech, vintage, scales, list_dat):
     # This function is adapted from CPLEX's example script lpex2.py
     # It does the same thing as sen_range, but with CPLEX API for Python
 
-    def validate_coef():
-        pass
+    def validate_coef(c0, instance, target_tech, target_year):
+        t = target_tech
+        v = target_year
+        P_0 = min( instance.time_optimize )
+        GDR = value( instance.GlobalDiscountRate )
+        MLL = instance.ModelLoanLife
+        MPL = instance.ModelProcessLife
+        LLN = instance.LifetimeLoanProcess
+        x   = 1 + GDR    # convenience variable, nothing more.
+        period_available = set()
+        for p in instance.time_future:
+            if (p, t, v) in instance.CostFixed.keys():
+                period_available.add(p)
+        c_i = ( 
+                instance.CostInvest[t, v] 
+                * instance.LoanAnnualize[t, v] 
+                * ( LLN[t, v] if not GDR else 
+                    (x**(P_0 - v + 1) 
+                    * ( 1 - x **( -value(LLN[t, v]) ) ) 
+                    / GDR) 
+                  ) 
+        )
 
+        c_s = (-1)*(
+            value( instance.CostInvest[t, v] )
+            * value( instance.SalvageRate[t, v] )
+            / ( 1 if not GDR else 
+                (1 + GDR)**( 
+                    instance.time_future.last() 
+                    - instance.time_future.first()
+                    - 1
+                    ) 
+                )
+            )
+
+        c_f = sum( 
+            instance.CostFixed[p, t, v]
+            * ( MPL[p, t, v] if not GDR else
+                (x**(P_0 - p + 1)
+                * ( 1 - x**( -value(MPL[p, t, v]) ) )
+                / GDR ) 
+              )
+            for p in period_available 
+        ) 
+        c = c_i + c_s + c_f
+
+        if (c - c0) <= 1E-5:
+            return True
+        else:
+            return False
     # Given a range of scaling factor for coefficient of a specific V_Capacity, 
     # returns objective value, reduced cost, capacity etc. for each scaling 
     # factor
@@ -277,10 +324,10 @@ def sen_range_api(tech, vintage, scales, list_dat):
     target_tech = tech
     target_var0 = 'V_Capacity(' + target_tech + '_' + str(target_year) + ')'
     algmap = {
-        'primal simplex': 'o',
-        'dual simplex':   'p',
-        'barrier':        'd',
-        'default':        'b',
+        'primal simplex': 'p',
+        'dual simplex':   'd',
+        'barrier':        'b',
+        'default':        'o',
     } # cplex definition
 
     t0 = time()
@@ -290,11 +337,14 @@ def sen_range_api(tech, vintage, scales, list_dat):
     data = return_Temoa_data(model, list_dat)
     instance = model.create_instance(data)
     instance.write('tmp.lp', io_options={'symbolic_solver_labels':True})
-
     c = cplex.Cplex('tmp.lp')
+    os.remove('tmp.lp')
     c.set_results_stream(None) # Turn screen output off
     alg = c.parameters.lpmethod.values
     c0 = c.objective.get_linear(target_var0)
+    if not validate_coef(c0, instance, target_tech, target_year):
+        print 'Error!'
+        sys.exit(0)
 
     ic0         = data['CostInvest'][target_tech, target_year]
     fc0         = data['CostFixed'][target_year, target_tech, target_year]
@@ -359,6 +409,10 @@ def sen_range_api(tech, vintage, scales, list_dat):
                 key = str(y)
                 target_var   = 'V_Capacity(' + target_tech + '_' + key + ')'
                 coefficient  = c.objective.get_linear(target_var)
+                if y != target_year:
+                    if not validate_coef(coefficient, instance, target_tech, y):
+                        print 'Error!'
+                        sys.exit(0)
                 capacity     = c.solution.get_values(target_var)
                 c_bound      = c.solution.sensitivity.objective(target_var)
                 cost_i       = s*value( instance.CostInvest[target_tech, y] )
@@ -429,7 +483,6 @@ def sen_range_api(tech, vintage, scales, list_dat):
             + [algorithm]
         ) # tech_name.year.dat_file_name.algorithm.xlsx
         wb.save(fname + '.xlsx')
-    os.remove('tmp.lp')
 
 def sen_range(tech, vintage, scales, dat):
     # Given a range of scaling factor for coefficient of a specific V_Capacity, 
