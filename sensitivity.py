@@ -1,15 +1,25 @@
 from pyomo.environ import *
 from pyomo.core import Constraint
 from pyomo.opt import SolverFactory
-import sys, xlsxwriter, os
+import sys, xlsxwriter, os, platform
 from matplotlib import pyplot as plt
 import numpy as np
 from collections import OrderedDict, defaultdict
 from time import time
 from IPython import embed as IP
 
-sys.path.append("/afs/unity.ncsu.edu/users/b/bli6/temoa/temoa_model")
-sys.path.append('/opt/ibm/ILOG/CPLEX_Studio1263/cplex/python/2.6/x86-64_linux')
+if platform.system() == 'Linux':
+    sys.path.append("/afs/unity.ncsu.edu/users/b/bli6/temoa/temoa_model")
+    sys.path.append('/opt/ibm/ILOG/CPLEX_Studio1263/cplex/python/2.6/x86-64_linux')
+elif platform.system() == 'Windows':
+    sys.path.append('C:\\Users\\bli\\GitHub\\Temoa\\temoa_model')
+    sys.path.append('D:\\software\\cplex\\python\\2.7\\x64_win64')
+elif platform.system() == 'Darwin':
+    sys.path.append('/Users/bli/git/temoa/temoa_model')
+    sys.path.append('/Users/bli/Applications/IBM/ILOG/CPLEX_Studio1263/cplex/python/2.7/x86-64_osx')
+else:
+    print 'Unrecognized system! Exiting...'
+    sys.exit(0)
 
 def return_Temoa_model():
     from temoa_model import temoa_create_model
@@ -326,7 +336,7 @@ def sen_range_api(tech, vintage, scales, list_dat):
     algmap = {
         'primal simplex': 'p',
         'dual simplex':   'd',
-        'barrier':        'b',
+        'barrier':        'h', # This is cross-over mode, since pure interior causes problems
         'default':        'o',
     } # cplex definition
 
@@ -336,15 +346,6 @@ def sen_range_api(tech, vintage, scales, list_dat):
     model = return_Temoa_model()
     data = return_Temoa_data(model, list_dat)
     instance = model.create_instance(data)
-    instance.write('tmp.lp', io_options={'symbolic_solver_labels':True})
-    c = cplex.Cplex('tmp.lp')
-    os.remove('tmp.lp')
-    c.set_results_stream(None) # Turn screen output off
-    alg = c.parameters.lpmethod.values
-    c0 = c.objective.get_linear(target_var0)
-    if not validate_coef(c0, instance, target_tech, target_year):
-        print 'Error!'
-        sys.exit(0)
 
     ic0         = data['CostInvest'][target_tech, target_year]
     fc0         = data['CostFixed'][target_year, target_tech, target_year]
@@ -362,27 +363,36 @@ def sen_range_api(tech, vintage, scales, list_dat):
     rc   = dict() # Reduced cost
 
     for algorithm in ['barrier', 'dual simplex', 'primal simplex']:
+        print 'Algorithm: {}'.format( algorithm )
+        instance.write('tmp.lp', io_options={'symbolic_solver_labels':True})
+        c = cplex.Cplex('tmp.lp')
+        os.remove('tmp.lp')
+        c.set_results_stream(None) # Turn screen output off
+        c0 = c.objective.get_linear(target_var0)
+        if not validate_coef(c0, instance, target_tech, target_year):
+            print 'Error!'
+            sys.exit(0)
+        print '[{:>9.2f}] CPLEX model loaded.'.format( time_mark() )
+
         if algmap[algorithm] == "o":
-            c.parameters.lpmethod.set(alg.auto)
+            c.parameters.lpmethod.set(c.parameters.lpmethod.values.auto)
         elif algmap[algorithm] == "p":
-            c.parameters.lpmethod.set(alg.primal)
+            c.parameters.lpmethod.set(c.parameters.lpmethod.values.primal)
         elif algmap[algorithm] == "d":
-            c.parameters.lpmethod.set(alg.dual)
+            c.parameters.lpmethod.set(c.parameters.lpmethod.values.dual)
         elif algmap[algorithm] == "b":
-            c.parameters.lpmethod.set(alg.barrier)
+            c.parameters.lpmethod.set(c.parameters.lpmethod.values.barrier)
             c.parameters.barrier.crossover.set(
                 c.parameters.barrier.crossover.values.none)
         elif algmap[algorithm] == "h":
-            c.parameters.lpmethod.set(alg.barrier)
+            c.parameters.lpmethod.set(c.parameters.lpmethod.values.barrier)
         elif algmap[algorithm] == "s":
-            c.parameters.lpmethod.set(alg.sifting)
+            c.parameters.lpmethod.set(c.parameters.lpmethod.values.sifting)
         elif algmap[algorithm] == "c":
-            c.parameters.lpmethod.set(alg.concurrent)
+            c.parameters.lpmethod.set(c.parameters.lpmethod.values.concurrent)
         else:
             raise ValueError(
                 'method must be one of "o", "p", "d", "b", "h", "s" or "c"')
-
-        print 'Algorithm: {}'.format( algorithm )
 
         obj_alg  = list()
         cap_alg  = defaultdict(list)
@@ -413,18 +423,29 @@ def sen_range_api(tech, vintage, scales, list_dat):
                     if not validate_coef(coefficient, instance, target_tech, y):
                         print 'Error!'
                         sys.exit(0)
-                capacity     = c.solution.get_values(target_var)
-                c_bound      = c.solution.sensitivity.objective(target_var)
-                cost_i       = s*value( instance.CostInvest[target_tech, y] )
-                cost_f       = s*value( instance.CostFixed[y, target_tech, y] )
-                s_be         = c_bound[0] / coefficient # Break-even scale
+                capacity = c.solution.get_values(target_var)
+                try:
+                    # Out of some unknow reason, sometimes this function will 
+                    # fail even though the model is totally feasible.
+                    c_bound = c.solution.sensitivity.objective(target_var)
+                    s_be    = c_bound[0] / coefficient # Break-even scale
+                except:
+                    c_bound = [None, None]
+                    s_be    = None
+                cost_i = s*value( instance.CostInvest[target_tech, y] )
+                cost_f = s*value( instance.CostFixed[y, target_tech, y] )
+                
 
                 cap_alg[key].append(capacity)
                 coef_alg[key].append(coefficient)
                 ic_alg[key].append(cost_i)
                 fc_alg[key].append(cost_f)
-                bic_alg[key].append(s_be*cost_i)
-                bfc_alg[key].append(s_be*cost_f)
+                if s_be:
+                    bic_alg[key].append(s_be*cost_i)
+                    bfc_alg[key].append(s_be*cost_f)
+                else:
+                    bic_alg[key].append(None)
+                    bfc_alg[key].append(None)
                 clb_alg[key].append( c_bound[0] )
                 cub_alg[key].append( c_bound[1] )
                 rc_alg[key].append( c.solution.get_reduced_costs(target_var) )
