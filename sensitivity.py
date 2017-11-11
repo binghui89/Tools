@@ -1,7 +1,7 @@
 from pyomo.environ import *
 from pyomo.core import Constraint
 from pyomo.opt import SolverFactory
-import sys, xlsxwriter, os, platform
+import sys, os, platform
 from matplotlib import pyplot as plt
 import numpy as np
 from collections import OrderedDict, defaultdict
