@@ -1,5 +1,5 @@
 #!/usr/bin/env pyomo_python
-import sqlite3, sys, getopt
+import sqlite3, sys, getopt, os
 from matplotlib import pyplot as plt
 import matplotlib.lines as mlines
 import numpy as np
@@ -129,6 +129,234 @@ hatch_map = {
     'EE':    '//',
     'other': '++'
     }
+
+def return_database(fname, s_chosen):
+    con = sqlite3.connect(fname)
+    cur = con.cursor()
+
+    qry = "SELECT * FROM Output_CapacityByPeriodAndTech"
+    qry += " WHERE scenario='" + s_chosen + "'"
+    cur.execute(qry)
+    Output_CapacityByPeriodAndTech = cur.fetchall()
+    
+    # qry = "SELECT * FROM Output_VFlow_Out WHERE output_comm == 'ELC'"
+    qry = "SELECT * FROM Output_VFlow_Out"
+    qry += " WHERE scenario='" + s_chosen + "'"
+    cur.execute(qry)
+    Output_Activity = cur.fetchall()
+    
+    qry = "SELECT * FROM Output_Emissions"
+    qry += " WHERE scenario='" + s_chosen + "'"
+    cur.execute(qry)
+    Output_Emissions = cur.fetchall()
+    
+    qry = "SELECT * FROM time_season"
+    cur.execute(qry)
+    seasons = cur.fetchall()
+    seasons = [str(i[0]) for i in seasons]
+    
+    qry = "SELECT * FROM time_of_day"
+    cur.execute(qry)
+    tods = cur.fetchall()
+    tods = [str(i[0]) for i in tods]
+    
+    qry = "SELECT * FROM Demand"
+    cur.execute(qry)
+    Demands = cur.fetchall()
+    Demands = [i[2] for i in Demands]
+
+    qry = "SELECT * FROM DemandSpecificDistribution"
+    cur.execute(qry)
+    DSD = cur.fetchall()
+    DSD = [i[3] for i in DSD]
+
+    qry = "SELECT * FROM SegFrac"
+    cur.execute(qry)
+    SegFrac = cur.fetchall()
+    SegFrac = [i[2] for i in SegFrac]
+
+    qry = "SELECT * FROM Efficiency"
+
+    con.close()
+
+    periods     = set()
+    techs       = set() # This set include the broader tech catagory: NGA, BIO, etc.
+    e_ctrls     = set() # Emission being controlled, CO2, SO2, etc.
+    
+    for row in Output_CapacityByPeriodAndTech:
+        scenario, sector, p, t, value = row
+        periods.add(p)
+        # periods.append(p)
+        if t in tech_map:
+            techs.add(tech_map[t])
+        if t in emis_map:
+            e_ctrls.add(emis_map[t])
+    
+    periods = list(periods)
+    periods.sort()
+    techs = list(techs)
+    if 'EE' in techs:
+        techs.remove('EE')
+        techs.append('EE') # EE always on top of all color
+
+    chemicals = set()
+
+    for row in Output_Emissions:
+        # Scenario, sector, period, emission, tech, vintage, value
+        scenario, sector, p, e, t, v, value = row
+        chemicals.add(e)
+
+    # chemicals = list(chemicals)
+
+    capacities = dict()
+    cap_e_ctrl = dict()
+    activities = dict()
+    act_e_ctrl = dict()
+    emissions  = dict()
+    emissions1 = dict() # emissions1 is emission by source
+    emis_redct = dict()
+
+    p_t = dict() # power output in each time slice by technology
+
+    for tech in techs:
+        capacities[tech] = [0]*len(periods)
+        activities[tech] = [0]*len(periods)
+
+    # for t in tech_map.keys():
+    #     p_t[t] = dict()
+    #     for p in periods:
+    #         p_t[t][str(p)] = [0]*len(seasons)*len(tods)
+    for t in tech_map.keys():
+        p_t[t] = list()
+        p_t[tech_map[t]] = list()
+        for p in periods:
+            p_t[t].append( [0]*len(seasons)*len(tods) )
+            p_t[tech_map[t]].append( [0]*len(seasons)*len(tods) )
+
+    for tech in e_ctrls:
+        cap_e_ctrl[tech] = [0]*len(periods)
+        act_e_ctrl[tech] = [0]*len(periods)
+
+    for row in Output_CapacityByPeriodAndTech:
+        scenario, sector, p, t, value = row
+        if t in tech_map:
+            capacities[tech_map[t]][periods.index(p)] += value
+        if t in emis_map:
+            cap_e_ctrl[emis_map[t]][periods.index(p)] += value
+
+    for row in Output_Activity:
+        scenario, sector, p, s, d, i, t, v, o, value = row
+        # Scenario, sector, period, season, tod, input, tech, vintage, output, value
+        if (t in tech_map and o in ['ELC', 'ELCRNWB', 'ELCSOL']) or (t == 'EE'):
+            # o == 'ELC': Common EGU; o == 'ELCRNWB': renewable EGU;
+            pindex = periods.index(p) # period index
+            hindex = len(tods)*seasons.index(s) + tods.index(d) # 'hour' index
+            activities[tech_map[t]][pindex] += value
+            p_t[t][pindex][hindex] += value
+            if t != 'EE':
+                p_t[tech_map[t]][pindex][hindex] += value
+
+        if t in emis_map:
+            act_e_ctrl[emis_map[t]][periods.index(p)] += value
+
+    for chemical in chemicals:
+        temp = {
+                'NGA':   [0]*len(periods),
+                'COA':   [0]*len(periods),
+                'BIO':   [0]*len(periods),
+                'OIL':   [0]*len(periods),
+                'other': [0]*len(periods)
+        }
+        emissions1[chemical] = temp
+        emissions[chemical]  = [0]*len(periods)
+        emis_redct[chemical] = [0]*len(periods)
+    
+    for row in Output_Emissions:
+        # Scenario, sector, period, emission, tech, vintage, value
+        scenario, sector, p, e, t, v, value = row # To increase readability
+        emissions[e][periods.index(p)] += value
+        if value < 0:
+            emis_redct[e][periods.index(p)] += -value
+
+        if value < 0:
+            catagory = 'COA'
+        elif t == 'E_EA_COAB':
+            catagory = 'COA'
+        elif t in tech_map:
+            catagory = tech_map[t]
+        else:
+            catagory = 'other'
+
+        emissions1[e][catagory][periods.index(p)] += value
+
+    return periods, capacities, activities
+
+def plot_stochastic():
+    techs = ['COA', 'NGA', 'SOL', 'NUC']
+    directory = '/mnt/disk2/bli6/TEMOA_stochastic/NCupdated_leadtime_noDemandActivity/20'
+    run = [
+        'COALCCS-CP',    
+        'COALCCS-noCP',  
+        # 'noCOALCCS-CP',  
+        # 'noCOALCCS-noCP',
+    ]
+    scenarios = [
+        'NCupdated.L',
+        'NCupdated.R',
+        'NCupdated.H',
+    ]
+    linestyle_s = ['--', '-', ':']
+    color_f     = ['red', 'blue', 'yellow', 'green']
+    alpha = 0.2
+    db_name = 'NCupdated.db'
+    filenames = [os.path.sep.join( [directory, i, db_name] ) for i in run]
+
+    capacities_rs = dict() # Capacities in GW, all runs, all scenarios
+    activities_rs = dict() # Activities in PJ, all runs, all scenarios
+    for r in run:
+        f = filenames[ run.index(r) ]
+        capacities_s = dict()
+        activities_s = dict()
+        for s in scenarios:
+            periods, capacities, activities = return_database( f, s )
+            capacities_s[s] = capacities
+            activities_s[s] = activities
+        capacities_rs[r] = capacities_s
+        activities_rs[r] = activities_s
+
+    for t in techs:
+        plt.figure( techs.index(t) )
+        handles = list()
+        for i in range(0, len(filenames)):
+            c = color_f[i]
+            f = filenames[i]
+            # a_s = dict() # Activities by scenario
+            # for s in scenarios:
+            #     periods, capacities, activities = return_database( f, s )
+            a_s = activities_rs[run[i]]
+            for j in range(0, len(scenarios)):
+                s = scenarios[j]
+                l = linestyle_s[j]
+                plt.plot(
+                    periods,
+                    a_s[s][t],
+                    color=c,
+                    linestyle=l,
+                    # alpha=alpha,
+                    linewidth=2,
+                )
+            h = plt.fill_between(
+                periods, 
+                a_s[scenarios[0]][t], 
+                a_s[scenarios[-1]][t], 
+                color=c, 
+                alpha=alpha,
+            )
+            handles.append(h)
+        plt.legend(handles, run, loc='upper left')
+        plt.title(t)
+    plt.show()
+
 
 def plot_result(fname, s_chosen):
     con = sqlite3.connect(fname)
