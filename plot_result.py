@@ -296,25 +296,16 @@ class TemoaNCResult():
 
             self.emissions1[e][catagory][self.periods.index(p)] += value
 
-def plot_stochastic_var():
-    techs = ['COA', 'NGA', 'SOL', 'NUC']
-    directory = '/mnt/disk2/bli6/TEMOA_stochastic/NCupdated_leadtime_noDemandActivity/20'
-    run = [
-        'COALCCS-CP',    
-        'COALCCS-noCP',  
-        # 'noCOALCCS-CP',  
-        # 'noCOALCCS-noCP',
-    ]
-    scenarios = [
-        'NCupdated.L',
-        'NCupdated.R',
-        'NCupdated.H',
-    ]
-    linestyle_s = ['--', '-', ':']
-    color_f     = ['red', 'blue', 'yellow', 'green']
-    alpha = 0.2
-    db_name = 'NCupdated.db'
-    filenames = [os.path.sep.join( [directory, i, db_name] ) for i in run]
+def plot_stochastic_var(options):
+    techs       = options.techs
+    directory   = options.directory
+    run         = options.run
+    scenarios   = options.scenarios
+    linestyle_s = options.linestyle_s
+    color_r     = options.color_r
+    alpha       = options.alpha
+    db_name     = options.db_name
+    filenames   = [os.path.sep.join( [directory, i, db_name] ) for i in run]
 
     capacities_rs = dict() # Capacities in GW, all runs, all scenarios
     activities_rs = dict() # Activities in PJ, all runs, all scenarios
@@ -336,7 +327,7 @@ def plot_stochastic_var():
         plt.figure( techs.index(t) )
         handles = list()
         for i in range(0, len(filenames)):
-            c = color_f[i]
+            c = color_r[i]
             f = filenames[i]
             a_s = activities_rs[run[i]]
             for j in range(0, len(scenarios)):
