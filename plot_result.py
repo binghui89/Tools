@@ -11,10 +11,10 @@ tech_map = {
     'ENGACT05':     'NGA',    
     'ENGAACC':      'NGA',
     'ENGAACT':      'NGA',
-    'ENGACCCCS':    'NGA',
     'ENGACCR':      'NGA',
     'ENGACTR':      'NGA',
     'ENGASTMR':     'NGA',
+    'ENGACCCCS':    'NGA',
     'ECOALSTM':     'COA',    
     'ECOALIGCC':    'COA',
     'ECOALIGCCS':   'COA',
@@ -49,7 +49,8 @@ tech_map = {
     'ELFGICER':     'BIO',
     'ELFGGTR':      'BIO',
     'EHYDGS':       'GSR',
-    'EE':           'EE'
+    'EE':           'EE',
+    'EURNSMR':      'SMR',
     }
 
 emis_map = {
@@ -303,6 +304,7 @@ def plot_stochastic_var(options):
     scenarios   = options.scenarios
     linestyle_s = options.linestyle_s
     color_r     = options.color_r
+    hatch_r     = options.hatch_r
     alpha       = options.alpha
     db_name     = options.db_name
     filenames   = [os.path.sep.join( [directory, i, db_name] ) for i in run]
@@ -323,41 +325,71 @@ def plot_stochastic_var(options):
         capacities_rs[r] = capacities_s
         activities_rs[r] = activities_s
 
-    for t in techs:
-        plt.figure( techs.index(t) )
-        handles = list()
-        for i in range(0, len(filenames)):
-            c = color_r[i]
-            f = filenames[i]
-            a_s = activities_rs[run[i]]
-            for j in range(0, len(scenarios)):
-                s = scenarios[j]
-                l = linestyle_s[j]
-                plt.plot(
-                    periods,
-                    a_s[s][t],
+    y_label = ['Capacities (GW)', 'Activities (TWh)']
+    for k in range(0, len(y_label) ):
+        if k == 0:
+            y_value_rs = capacities_rs
+        elif k == 1:
+            y_value_rs = dict()
+            for r in run:
+                y_value_rs[r] = dict()
+                for s in scenarios:
+                    y_value_rs[r][s] = dict()
+                    for t in techs:
+                        if t in activities_rs[r][s]:
+                            y_value_rs[r][s][t] = [v/3.6 for v in activities_rs[r][s][t]]
+        for r in run:
+            for s in scenarios:
+                for t in techs:
+                    if t not in y_value_rs[r][s]:
+                        y_value_rs[r][s][t] = [0]*8 # 8 periods in NC dataset
+        for t in techs:
+            plt.figure( k*len(techs) + techs.index(t) )
+            handles = list()
+            for i in range(0, len(filenames)):
+                c  = color_r[i]
+                f  = filenames[i]
+                ht = hatch_r[i]
+                y_value_s = y_value_rs[run[i]]
+                for j in range(0, len(scenarios)):
+                    s = scenarios[j]
+                    l = linestyle_s[j]
+                    plt.plot(
+                        periods,
+                        y_value_s[s][t],
+                        color=c,
+                        linestyle=l,
+                        # alpha=alpha,
+                        linewidth=2,
+                    )
+                h = plt.fill_between(
+                    periods, 
+                    y_value_s[scenarios[0]][t], 
+                    y_value_s[scenarios[-1]][t], 
                     color=c,
-                    linestyle=l,
-                    # alpha=alpha,
-                    linewidth=2,
+                    alpha=alpha,
+                    hatch=ht
                 )
-            h = plt.fill_between(
-                periods, 
-                a_s[scenarios[0]][t], 
-                a_s[scenarios[-1]][t], 
-                color=c, 
-                alpha=alpha,
-            )
-            handles.append(h)
-        plt.legend(handles, run, loc='upper left')
-        plt.title(t)
+                handles.append(h)
+            plt.legend(handles, run, loc='upper left')
+            plt.xlabel('Period')
+            plt.ylabel(y_label[k])
+            plt.title(t)
+
     plt.show()
 
 def plot_stochastic_obj(l_scale, directory, run, scenarios, db_name):
     x_cross = list()
     y_cross = list()
     plt.figure(0)
-    for scale in l_scale:
+    for nfigure in range(0, len(l_scale)):
+    # for scale in l_scale:
+        if 'SMR' in run[0]:
+            l_string = ['SMR', 'noSMR', 'neverSMR']
+        elif 'CCS' in run[0]:
+            l_string = ['CCS', 'noCCS', 'neverCCS']
+        scale = l_scale[nfigure]
+        plt.figure(nfigure)
         filenames = [os.path.sep.join( [directory, str(scale), i, db_name] ) for i in run]
         obj_r = dict() # Stochastic objective value for each run
         for r in run:
@@ -366,10 +398,16 @@ def plot_stochastic_obj(l_scale, directory, run, scenarios, db_name):
             for s in scenarios:
                 instance   = TemoaNCResult(f, s)
                 obj.append(instance.TotalCost)
-            obj_r[r] = sum(obj)/3.0 # We know the probability for each scenario is 1/3
+            # We know the probability for each scenario is 1/3, and convert it to billion $
+            obj_r[r] = sum(obj)/3.0/1E3
         prob = [0, 1]
-        plt.plot(prob, [ obj_r[ run[2] ], obj_r[ run[0] ] ], '-bs')
-        plt.plot(prob, [ obj_r[ run[3] ], obj_r[ run[1] ] ], '-rs')
+        handles = list()
+        h, = plt.plot(prob, [ obj_r[ run[2] ], obj_r[ run[0] ] ], '-bs', label=l_string[0])
+        handles.append(h)
+        h, = plt.plot(prob, [ obj_r[ run[3] ], obj_r[ run[1] ] ], '-rs', label=l_string[1])
+        handles.append(h)
+        h, = plt.plot(prob, [ obj_r[ run[5] ], obj_r[ run[4] ] ], '-ks', label=l_string[2])
+        handles.append(h)
 
         x = -( 
             obj_r[ run[2] ] -
@@ -387,10 +425,51 @@ def plot_stochastic_obj(l_scale, directory, run, scenarios, db_name):
         y = obj_r[ run[2] ] + x*(obj_r[ run[0] ] - obj_r[ run[2] ])
         x_cross.append(x)
         y_cross.append(y)
-    plt.plot(x_cross, y_cross, 'k*')
+        plt.plot(x, y, 'k*')
+        plt.legend(handles=handles, loc='upper left')
+        plt.xlabel(r'$p_{CP}$')
+        plt.ylabel('Objective value (billion $)')
 
-    plt.figure(1)
+    plt.figure(nfigure+1)
     plt.plot(l_scale, x_cross, 'k*')
+    plt.xlabel('Scaling factor')
+    plt.ylabel(r'$p_{CP}$ at intersection')
+    plt.show()
+
+def plot_evpi(options = None):
+    directory =      options.directory
+    scale =          options.scale
+    run =            options.run
+    scenario_sto =   options.scenario_sto
+    scenario_det =   options.scenario_det
+    color_r =        options.color_r
+    linetype_r =     options.linetype_r
+    prob =           options.prob
+    db_name =        options.db_name
+
+    dic_evpi = dict()
+    for r in run:
+        dic_evpi[r] = list()
+        for k in scale:
+            fname = os.path.sep.join([directory, k, r, db_name])
+            evpi = 0
+            for i in range(0, len(scenario_sto)):
+                s_sto = scenario_sto[i]
+                s_det = scenario_det[i]
+                instance_sto = TemoaNCResult(fname, s_sto)
+                instance_det = TemoaNCResult(fname, s_det)
+                evpi += (instance_sto.TotalCost - instance_det.TotalCost)*prob[i]
+            dic_evpi[r].append(evpi)
+
+    handles = list()
+    x = [float(i) for i in scale]
+    for r in run:
+        y = dic_evpi[r]
+        h, = plt.plot(x, y, color=color_r[r], linestyle=linetype_r[r], label=r)
+        handles.append(h)
+    plt.xlabel('Cost multiplier (%)')
+    plt.ylabel('EVPI (million $)')
+    plt.legend(handles=handles, loc='center right')
     plt.show()
 
 def plot_result(fname, s_chosen):
