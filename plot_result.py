@@ -425,14 +425,14 @@ def plot_stochastic_obj(l_scale, directory, run, scenarios, db_name):
         y = obj_r[ run[2] ] + x*(obj_r[ run[0] ] - obj_r[ run[2] ])
         x_cross.append(x)
         y_cross.append(y)
-        plt.plot(x, y, 'k*')
+        plt.plot(x, y, 'ks')
         plt.legend(handles=handles, loc='upper left')
         plt.xlabel(r'$p_{CP}$')
         plt.ylabel('Objective value (billion $)')
 
     plt.figure(nfigure+1)
-    plt.plot(l_scale, x_cross, 'k*')
-    plt.xlabel('Scaling factor')
+    plt.plot(l_scale, x_cross, '--ks')
+    plt.xlabel('Cost multiplier (%)')
     plt.ylabel(r'$p_{CP}$ at intersection')
     plt.show()
 
