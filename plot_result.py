@@ -381,9 +381,11 @@ def plot_stochastic_var(options):
 def plot_stochastic_obj(l_scale, directory, run, scenarios, db_name):
     x_cross = list()
     y_cross = list()
+    obj_rs  = dict() # Dictionary of objective values indexed by run, each run is a list
+    for r in run:
+        obj_rs[r] = list()
     plt.figure(0)
     for nfigure in range(0, len(l_scale)):
-    # for scale in l_scale:
         if 'SMR' in run[0]:
             l_string = ['SMR', 'noSMR', 'neverSMR']
         elif 'CCS' in run[0]:
@@ -400,6 +402,7 @@ def plot_stochastic_obj(l_scale, directory, run, scenarios, db_name):
                 obj.append(instance.TotalCost)
             # We know the probability for each scenario is 1/3, and convert it to billion $
             obj_r[r] = sum(obj)/3.0/1E3
+            obj_rs[r].append(obj_r[r])
         prob = [0, 1]
         handles = list()
         h, = plt.plot(prob, [ obj_r[ run[2] ], obj_r[ run[0] ] ], '-bs', label=l_string[0])
@@ -434,6 +437,18 @@ def plot_stochastic_obj(l_scale, directory, run, scenarios, db_name):
     plt.plot(l_scale, x_cross, '--ks')
     plt.xlabel('Cost multiplier (%)')
     plt.ylabel(r'$p_{CP}$ at intersection')
+
+    plt.figure(nfigure+2)
+    lines = {
+        'SMR-CP':          '-bs',
+        'SMR-noCP':        '--bs',
+        'noSMR-CP':        '-rs',
+        'noSMR-noCP':      '--rs',
+        'neverSMR-CP':     '-ks',
+        'neverSMR-noCP':   '--ks',
+    }
+    for r in run:
+        plt.plot(l_scale, obj_rs[r], lines[r])
     plt.show()
 
 def plot_evpi(options = None):
