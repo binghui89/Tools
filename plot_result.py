@@ -379,12 +379,34 @@ def plot_stochastic_var(options):
     plt.show()
 
 def plot_stochastic_obj(l_scale, directory, run, scenarios, db_name):
+    def return_actual_file(f):
+        # Due to time limit, our run is not complete, some run is missing, but 
+        # they can be replaced equally by other runs.
+        f_dir  = os.path.dirname(f)
+        f_name = os.path.basename(f)
+        if os.path.isdir(f_dir):
+            return f
+        elif 'SMR1350-CP' in f_dir:
+            return os.path.sep.join(
+                        [
+                          f_dir.replace('SMR1350-CP', 'SMR-CP'),
+                          f_name,
+                        ]
+            )
+        elif 'neverSMR-CP' in f_dir:
+            return '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NCupdated_SMR_leadtime_noDemandActivity/50/neverSMR-CP/NCupdated_SMR.db'
+        elif 'neverSMR-noCP' in f_dir:
+            return '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_stochastic/NCupdated_SMR_leadtime_noDemandActivity/50/neverSMR-noCP/NCupdated_SMR.db'
+        else:
+            print 'Error!'
+            print f
+            sys.exit(0)
+
     x_cross = list()
     y_cross = list()
     obj_rs  = dict() # Dictionary of objective values indexed by run, each run is a list
     for r in run:
         obj_rs[r] = list()
-    plt.figure(0)
     for nfigure in range(0, len(l_scale)):
         if 'SMR' in run[0]:
             l_string = ['SMR', 'noSMR', 'neverSMR']
@@ -395,9 +417,10 @@ def plot_stochastic_obj(l_scale, directory, run, scenarios, db_name):
         filenames = [os.path.sep.join( [directory, str(scale), i, db_name] ) for i in run]
         obj_r = dict() # Stochastic objective value for each run
         for r in run:
-            f = filenames[ run.index(r) ]
+            f = return_actual_file( filenames[ run.index(r) ] )
             obj = list()
             for s in scenarios:
+                print f, s
                 instance   = TemoaNCResult(f, s)
                 obj.append(instance.TotalCost)
             # We know the probability for each scenario is 1/3, and convert it to billion $
@@ -412,10 +435,8 @@ def plot_stochastic_obj(l_scale, directory, run, scenarios, db_name):
         h, = plt.plot(prob, [ obj_r[ run[5] ], obj_r[ run[4] ] ], '-ks', label=l_string[2])
         handles.append(h)
 
-        x = -( 
-            obj_r[ run[2] ] -
-            obj_r[ run[3] ]
-        )/( 
+        numerator   = -( obj_r[ run[2] ] - obj_r[ run[3] ] )
+        denominator = ( 
             ( 
                 obj_r[ run[0] ] -
                 obj_r[ run[2] ]
@@ -425,30 +446,36 @@ def plot_stochastic_obj(l_scale, directory, run, scenarios, db_name):
                 obj_r[ run[3] ]
             )
         )
-        y = obj_r[ run[2] ] + x*(obj_r[ run[0] ] - obj_r[ run[2] ])
-        x_cross.append(x)
-        y_cross.append(y)
-        plt.plot(x, y, 'ks')
+        # if denominator>1E-3:
+        #     print x, y
+        #     x_cross.append(x)
+        #     y_cross.append(y)
+        #     plt.plot(x, y, 'xs')
         plt.legend(handles=handles, loc='upper left')
+        plt.title('Cost x {}%'.format(scale))
         plt.xlabel(r'$p_{CP}$')
-        plt.ylabel('Objective value (billion $)')
+        plt.ylabel('Objective values (billion $)')
 
-    plt.figure(nfigure+1)
-    plt.plot(l_scale, x_cross, '--ks')
-    plt.xlabel('Cost multiplier (%)')
-    plt.ylabel(r'$p_{CP}$ at intersection')
+    # plt.figure(nfigure+1)
+    # plt.plot(l_scale, x_cross, '--ks')
+    # plt.xlabel('Cost multiplier (%)')
+    # plt.ylabel(r'$p_{CP}$ at intersection')
 
     plt.figure(nfigure+2)
     lines = {
-        'SMR-CP':          '-bs',
-        'SMR-noCP':        '--bs',
+        'SMR-CP':          '-gs',
+        'SMR-noCP':        '--gs',
         'noSMR-CP':        '-rs',
         'noSMR-noCP':      '--rs',
         'neverSMR-CP':     '-ks',
         'neverSMR-noCP':   '--ks',
+        'SMR1350-CP':      '-bs',
+        'SMR1350-noCP':    '--bs',
     }
     for r in run:
         plt.plot(l_scale, obj_rs[r], lines[r])
+    plt.xlabel('Cost multipler (%)')
+    plt.ylabel('Objective values (billion $)')
     plt.show()
 
 def plot_evpi(options = None):
