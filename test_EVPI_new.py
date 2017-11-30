@@ -30,25 +30,29 @@ def return_CP_and_path(p_data):
     # return_CP_and_path(p_data) -> dict(), dict()
     # This function reads the path to the instance directory (p_data) and 
     # returns conditional two dictionaries, the first one is the conditional 
-    # probability condition of a scenario, the second one is the path to
-    # all files of a scenario.
+    # probability of a scenario, the second one is the path to all files of a
+    # scenario.
     from collections import deque, defaultdict
-    from pyomo.pysp.util.scenariomodels import scenario_tree_model
+    # from pyomo.pysp.util.scenariomodels import scenario_tree_model
+    from pyomo.pysp.scenariotree.tree_structure_model import \
+    CreateAbstractScenarioTreeModel
+
     pwd = os.getcwd()
     os.chdir(p_data)
 
     s2fp_dict = defaultdict(deque) # Scenario to 'file path' dictionary, .dat not included
     s2cd_dict = defaultdict(float) # Scenario to conditonal density mapping
-    sStructure = scenario_tree_model.create_instance( filename='ScenarioStructure.dat' )
+    # sStructure = scenario_tree_model.create_instance( filename='ScenarioStructure.dat' )
+    sStructure = CreateAbstractScenarioTreeModel().create_instance( filename='ScenarioStructure.dat' )
 
     # The following code is borrowed from Kevin's temoa_lib.py
     ###########################################################################
     # Step 1: find the root node.  PySP doesn't make this very easy ...
-
+    
     # a child -> parent mapping, because every child has only one parent, but
     # not vice-versa
     ctpTree = dict() # Child to parent dict, one to one mapping
-
+    
     to_process = deque()
     to_process.extend( sStructure.Children.keys() )
     while to_process:
@@ -58,20 +62,25 @@ def return_CP_and_path(p_data):
             new_nodes = set( sStructure.Children[ node ] )
             to_process.extend( new_nodes )
             ctpTree.update({n : node for n in new_nodes })
-
-                     # parents           -     children
+    
+    #                  parents           -     children
     root_node = (set( ctpTree.values() ) - set( ctpTree.keys() )).pop()
-
+    
     # ptcTree = defaultdict( list ) # Parent to child node, one to multiple mapping
     # for c, p in ctpTree.iteritems():
     #         ptcTree[ p ].append( c )
     # ptcTree = dict( ptcTree )   # be slightly defensive; catch any additions
-
+    
     # leaf_nodes = set(ctpTree.keys()) - set(ctpTree.values())
-    leaf_nodes = set(sStructure.ScenarioLeafNode.values()) # Try to hack Kevin's code
+    # leaf_nodes = set(sStructure.ScenarioLeafNode.values()) # Try to hack Kevin's code
+    leaf_nodes = sStructure.ScenarioLeafNode.values() # Try to hack Kevin's code
+    leaf_nodes_names = list()
+    for n in leaf_nodes:
+        leaf_nodes_names.append(n.value)
+    leaf_nodes_names = set(leaf_nodes_names)
     
     scenario_nodes = dict() # Map from leafnode to 'node path'
-    for node in leaf_nodes: # e.g.: {Rs0s0: [R, Rs0, Rs0s0]}
+    for node in leaf_nodes_names: # e.g.: {Rs0s0: [R, Rs0, Rs0s0]}
         s = deque()
         scenario_nodes[ node ] = s
         while node in ctpTree:
@@ -83,8 +92,8 @@ def return_CP_and_path(p_data):
 
     for s in sStructure.Scenarios:
         cp = 1.0 # Starting probability
-        for n in scenario_nodes[sStructure.ScenarioLeafNode[s]]:
-            cp = cp*sStructure.ConditionalProbability[n]
+        for n in scenario_nodes[value( sStructure.ScenarioLeafNode[s]) ]:
+            cp = cp*value( sStructure.ConditionalProbability[n] )
             if not sStructure.ScenarioBasedData.value:
                 s2fp_dict[s].append(n + '.dat')
         s2cd_dict[s] = cp
