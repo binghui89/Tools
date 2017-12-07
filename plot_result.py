@@ -402,6 +402,33 @@ def plot_stochastic_obj(l_scale, directory, run, scenarios, db_name):
             print f
             sys.exit(0)
 
+    def return_stochastic_obj(directory, scale, decision):
+        p_cp_all = [20, 40, 60, 80]
+        obj_all  = []
+        for p_cp in p_cp_all:
+            f = os.path.sep.join([directory, str(scale)+'-CP'+str(p_cp), decision, db_name])
+            if 'never' in decision:
+                f = os.path.sep.join([directory, '60-CP'+str(p_cp), decision, db_name])
+            if not os.path.isfile(f):
+                print f
+                return
+            p = {
+                "NCupdated_SMR.H_CP":    1.0/3*p_cp/100.0,
+                "NCupdated_SMR.L_CP":    1.0/3*p_cp/100.0,
+                "NCupdated_SMR.R_CP":    1.0/3*p_cp/100.0,
+                "NCupdated_SMR.H_noCP":  1.0/3*(1 - p_cp/100.0),
+                "NCupdated_SMR.L_noCP":  1.0/3*(1 - p_cp/100.0),
+                "NCupdated_SMR.R_noCP":  1.0/3*(1 - p_cp/100.0),
+            }
+            obj = dict()
+            for s in p:
+                instance = TemoaNCResult(f, s)
+                obj[s] = instance.TotalCost
+            obj_all.append( sum([obj[s]*p[s] for s in p])/1E3 ) # Convert million $ into billion $
+        return [i/100.0 for i in p_cp_all], obj_all
+
+    MS = 3 # Marker size
+    LW = 0.5 # Linewidth
     x_cross = list()
     y_cross = list()
     obj_rs  = dict() # Dictionary of objective values indexed by run, each run is a list
@@ -420,7 +447,7 @@ def plot_stochastic_obj(l_scale, directory, run, scenarios, db_name):
             f = return_actual_file( filenames[ run.index(r) ] )
             obj = list()
             for s in scenarios:
-                print f, s
+                # print f, s
                 instance   = TemoaNCResult(f, s)
                 obj.append(instance.TotalCost)
             # We know the probability for each scenario is 1/3, and convert it to billion $
@@ -428,12 +455,41 @@ def plot_stochastic_obj(l_scale, directory, run, scenarios, db_name):
             obj_rs[r].append(obj_r[r])
         prob = [0, 1]
         handles = list()
-        h, = plt.plot(prob, [ obj_r[ run[2] ], obj_r[ run[0] ] ], '-bs', label=l_string[0])
+        h, = plt.plot(
+            prob, [ obj_r[ run[2] ], obj_r[ run[0] ] ], '-bs', 
+            label = l_string[0], 
+            markersize = MS, 
+            linewidth= LW,
+        )
         handles.append(h)
-        h, = plt.plot(prob, [ obj_r[ run[3] ], obj_r[ run[1] ] ], '-rs', label=l_string[1])
+        h, = plt.plot(
+            prob, [ obj_r[ run[3] ], obj_r[ run[1] ] ], '-rs', 
+            label=l_string[1], 
+            markersize=MS, 
+            linewidth=LW,
+        )
         handles.append(h)
-        h, = plt.plot(prob, [ obj_r[ run[5] ], obj_r[ run[4] ] ], '-ks', label=l_string[2])
+        h, = plt.plot(
+            prob, [ obj_r[ run[5] ], obj_r[ run[4] ] ], '-ks', 
+            label=l_string[2], 
+            markersize=MS, 
+            linewidth=LW,
+        )
         handles.append(h)
+
+        if scale in [50, 60, 80]:
+            colors = {'SMR1350': 'b', 'noSMR': 'r', 'neverSMR': 'k'}
+            for decision in ['SMR1350', 'noSMR', 'neverSMR']:
+                stoc_p, stoc_obj = return_stochastic_obj(
+                    os.path.sep.join( [directory, 'validation'] ),
+                    scale,
+                    decision,
+                )
+                plt.plot(
+                    stoc_p, stoc_obj, colors[decision]+'s', 
+                    markersize = MS,
+                    linewidth = LW,
+                )
 
         numerator   = -( obj_r[ run[2] ] - obj_r[ run[3] ] )
         denominator = ( 
@@ -473,7 +529,11 @@ def plot_stochastic_obj(l_scale, directory, run, scenarios, db_name):
         'SMR1350-noCP':    '--bs',
     }
     for r in run:
-        plt.plot(l_scale, obj_rs[r], lines[r])
+        plt.plot(
+            l_scale, obj_rs[r], lines[r],
+            markersize = MS,
+            linewidth = LW,
+        )
     plt.xlabel('Cost multipler (%)')
     plt.ylabel('Objective values (billion $)')
     plt.show()
