@@ -403,12 +403,15 @@ def plot_stochastic_obj(l_scale, directory, run, scenarios, db_name):
             sys.exit(0)
 
     def return_stochastic_obj(directory, scale, decision):
+        # Return the objective function of the sotchastic run with 6 scenarios
         p_cp_all = [20, 40, 60, 80]
         obj_all  = []
         for p_cp in p_cp_all:
             f = os.path.sep.join([directory, str(scale)+'-CP'+str(p_cp), decision, db_name])
             if 'never' in decision:
                 f = os.path.sep.join([directory, '60-CP'+str(p_cp), decision, db_name])
+            if scale == 100 and 'no' in decision:
+                f = os.path.sep.join([directory, '60-CP'+str(p_cp), 'neverSMR', db_name])
             if not os.path.isfile(f):
                 print f
                 return
@@ -477,7 +480,7 @@ def plot_stochastic_obj(l_scale, directory, run, scenarios, db_name):
         )
         handles.append(h)
 
-        if scale in [50, 60, 80]:
+        if scale in [50, 60, 80, 100]:
             colors = {'SMR1350': 'b', 'noSMR': 'r', 'neverSMR': 'k'}
             for decision in ['SMR1350', 'noSMR', 'neverSMR']:
                 stoc_p, stoc_obj = return_stochastic_obj(
@@ -486,7 +489,7 @@ def plot_stochastic_obj(l_scale, directory, run, scenarios, db_name):
                     decision,
                 )
                 plt.plot(
-                    stoc_p, stoc_obj, colors[decision]+'s', 
+                    stoc_p, stoc_obj, colors[decision]+'x', 
                     markersize = MS,
                     linewidth = LW,
                 )
@@ -510,7 +513,7 @@ def plot_stochastic_obj(l_scale, directory, run, scenarios, db_name):
         plt.legend(handles=handles, loc='upper left')
         plt.title('Cost x {}%'.format(scale))
         plt.xlabel(r'$p_{CP}$')
-        plt.ylabel('Objective values (billion $)')
+        plt.ylabel('Certainty equivalent (billion $)')
 
     # plt.figure(nfigure+1)
     # plt.plot(l_scale, x_cross, '--ks')
