@@ -78,6 +78,59 @@ def return_c_vector(block, unfixed):
         break
     return c_rhs
 
+def validate_coef(c0, instance, target_tech, target_year):
+    # This function validates if c0 equals the correct coefficient of process
+    # (target_tech, target_year)
+    t = target_tech
+    v = target_year
+    P_0 = min( instance.time_optimize )
+    GDR = value( instance.GlobalDiscountRate )
+    MLL = instance.ModelLoanLife
+    MPL = instance.ModelProcessLife
+    LLN = instance.LifetimeLoanProcess
+    x   = 1 + GDR    # convenience variable, nothing more.
+    period_available = set()
+    for p in instance.time_future:
+        if (p, t, v) in instance.CostFixed.keys():
+            period_available.add(p)
+    c_i = ( 
+            instance.CostInvest[t, v] 
+            * instance.LoanAnnualize[t, v] 
+            * ( LLN[t, v] if not GDR else 
+                (x**(P_0 - v + 1) 
+                * ( 1 - x **( -value(LLN[t, v]) ) ) 
+                / GDR) 
+                ) 
+    )
+
+    c_s = (-1)*(
+        value( instance.CostInvest[t, v] )
+        * value( instance.SalvageRate[t, v] )
+        / ( 1 if not GDR else 
+            (1 + GDR)**( 
+                instance.time_future.last() 
+                - instance.time_future.first()
+                - 1
+                ) 
+            )
+        )
+
+    c_f = sum( 
+        instance.CostFixed[p, t, v]
+        * ( MPL[p, t, v] if not GDR else
+            (x**(P_0 - p + 1)
+            * ( 1 - x**( -value(MPL[p, t, v]) ) )
+            / GDR ) 
+            )
+        for p in period_available 
+    ) 
+    c = c_i + c_s + c_f
+
+    if (c - c0) <= 1E-5:
+        return True
+    else:
+        return False
+
 def sensitivity(dat, techs):
     from temoa_model import temoa_create_model
     model = temoa_create_model()
@@ -193,6 +246,89 @@ def sensitivity(dat, techs):
                 for tod in instance.time_of_day:
                     print p, s, tod, instance.dual[instance.DemandConstraint[p,s,tod,c]], instance.slack[instance.DemandConstraint[p,s,tod,c]]
 
+def sensitivity_api(dat, techs, algorithm=None):
+    import cplex
+    model    = return_Temoa_model()
+    data     = return_Temoa_data(model, dat)
+    instance = model.create_instance(data)
+    instance.write('tmp.lp', io_options={'symbolic_solver_labels':True})
+    c = cplex.Cplex('tmp.lp')
+    os.remove('tmp.lp')
+    c.set_results_stream(None) # Turn screen output off
+
+    if algorithm:
+        if algorithm == "o":
+            c.parameters.lpmethod.set(c.parameters.lpmethod.values.auto)
+        elif algorithm == "p":
+            c.parameters.lpmethod.set(c.parameters.lpmethod.values.primal)
+        elif algorithm == "d":
+            c.parameters.lpmethod.set(c.parameters.lpmethod.values.dual)
+        elif algorithm == "b":
+            c.parameters.lpmethod.set(c.parameters.lpmethod.values.barrier)
+            c.parameters.barrier.crossover.set(
+                c.parameters.barrier.crossover.values.none)
+        elif algorithm == "h":
+            c.parameters.lpmethod.set(c.parameters.lpmethod.values.barrier)
+        elif algorithm == "s":
+            c.parameters.lpmethod.set(c.parameters.lpmethod.values.sifting)
+        elif algorithm == "c":
+            c.parameters.lpmethod.set(c.parameters.lpmethod.values.concurrent)
+        else:
+            raise ValueError(
+                'method must be one of "o", "p", "d", "b", "h", "s" or "c"')
+
+    try:
+        c.solve()
+    except CplexSolverError:
+        print("Exception raised during solve")
+        return
+
+    vintages = instance.vintage_optimize
+    coef_CAP = dict()
+    scal_CAP = dict()
+    # Break-even investment cost for this scenario, indexed by technology
+    years    = list()
+    bic_s    = dict()
+    ic_s     = dict() # Raw investment costs for this scenario, indexed by tech
+    cap_s    = dict()
+    clb_s    = dict()
+    cub_s    = dict()
+    for t in techs:
+        bic_s[t] = list()
+        ic_s[t]  = list()
+        cap_s[t] = list()
+        for v in vintages:
+            target_var  = 'V_Capacity(' + t + '_' + str(v) + ')'
+            c0          = c.objective.get_linear(target_var)
+            clb, cub    = c.solution.sensitivity.objective(target_var) # Coefficient lower bound, coefficient upper bound
+            if cub > 1E5:
+                cub = 0 # Infinity
+            clb_s[t, v], cub_s[t, v] = clb, cub
+            if not validate_coef(c0, instance, t, v):
+                print 'Error!'
+                sys.exit(0)
+            coef_CAP[t, v] = c0
+            scal_CAP[t, v] = clb/c0 # Must reduce TO this percentage
+            bic_s[t].append(scal_CAP[t, v]*instance.CostInvest[t, v])
+            ic_s[t].append(instance.CostInvest[t, v])
+            cap_s[t].append( c.solution.get_values(target_var) )
+
+        print "{:>10s}\t{:>7s}\t{:>6s}\t{:>4s}\t{:>6s}\t{:>5s}\t{:>7s}\t{:>7s}\t{:>5s}\t{:>3s}\t{:>5s}".format('Tech','Vintage', 'L. CB', 'Coef', 'U. CB', 'Scale', 'BE IC', 'BE FC', 'IC', 'FC', 'Cap')
+        for v in vintages:
+            print "{:>10s}\t{:>7g}\t{:>6.0f}\t{:>4.0f}\t{:>6.0f}\t{:>5.3f}\t{:>7.1f}\t{:>7.1f}\t{:>5.0f}\t{:>3.0f}\t{:>5.3f}".format(
+            t,
+            v, 
+            clb_s[t, v],
+            coef_CAP[t, v],
+            cub_s[t, v],
+            scal_CAP[t, v],
+            scal_CAP[t, v]*instance.CostInvest[t, v], 
+            scal_CAP[t, v]*instance.CostFixed[v, t, v], # Use the FC of the first period
+            instance.CostInvest[t,v],
+            instance.CostFixed[v, t, v],
+            c.solution.get_values(target_var)
+            )
+
 def bin_search(tech, vintage, dat, eps = 0.01, all_v = False):
     # Sensitivity analysis by binary search to find break-even scaling factor 
     # for a technology.
@@ -275,56 +411,6 @@ def sen_range_api(tech, vintage, scales, list_dat):
     # This function is adapted from CPLEX's example script lpex2.py
     # It does the same thing as sen_range, but with CPLEX API for Python
 
-    def validate_coef(c0, instance, target_tech, target_year):
-        t = target_tech
-        v = target_year
-        P_0 = min( instance.time_optimize )
-        GDR = value( instance.GlobalDiscountRate )
-        MLL = instance.ModelLoanLife
-        MPL = instance.ModelProcessLife
-        LLN = instance.LifetimeLoanProcess
-        x   = 1 + GDR    # convenience variable, nothing more.
-        period_available = set()
-        for p in instance.time_future:
-            if (p, t, v) in instance.CostFixed.keys():
-                period_available.add(p)
-        c_i = ( 
-                instance.CostInvest[t, v] 
-                * instance.LoanAnnualize[t, v] 
-                * ( LLN[t, v] if not GDR else 
-                    (x**(P_0 - v + 1) 
-                    * ( 1 - x **( -value(LLN[t, v]) ) ) 
-                    / GDR) 
-                  ) 
-        )
-
-        c_s = (-1)*(
-            value( instance.CostInvest[t, v] )
-            * value( instance.SalvageRate[t, v] )
-            / ( 1 if not GDR else 
-                (1 + GDR)**( 
-                    instance.time_future.last() 
-                    - instance.time_future.first()
-                    - 1
-                    ) 
-                )
-            )
-
-        c_f = sum( 
-            instance.CostFixed[p, t, v]
-            * ( MPL[p, t, v] if not GDR else
-                (x**(P_0 - p + 1)
-                * ( 1 - x**( -value(MPL[p, t, v]) ) )
-                / GDR ) 
-              )
-            for p in period_available 
-        ) 
-        c = c_i + c_s + c_f
-
-        if (c - c0) <= 1E-5:
-            return True
-        else:
-            return False
     # Given a range of scaling factor for coefficient of a specific V_Capacity, 
     # returns objective value, reduced cost, capacity etc. for each scaling 
     # factor
@@ -427,6 +513,8 @@ def sen_range_api(tech, vintage, scales, list_dat):
                 try:
                     # Out of some unknow reason, sometimes this function will 
                     # fail even though the model is totally feasible.
+                    # Notes: This function fails when cross-over is not selected
+                    # when barrier algorithm is selected
                     c_bound = c.solution.sensitivity.objective(target_var)
                     s_be    = c_bound[0] / coefficient # Break-even scale
                 except:
@@ -680,206 +768,6 @@ def explore_Cost_marginal(dat):
             for s in instance.time_season:
                 for tod in instance.time_of_day:
                     print p, s, tod, instance.dual[instance.DemandConstraint[p,s,tod,c]], instance.slack[instance.DemandConstraint[p,s,tod,c]]
-
-def do_sensitivity_old():
-    scenarios = ['LF', 'R', 'HF', 'CPPLF', 'CPP', 'CPPHF']
-    techs = ['ESOLPVCEN', 'EWNDON', 'EWNDOFS', 'EWNDOFD']
-    dat = dict()
-
-    dat['R']     = ['/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20151124/reference.dat']
-    dat['HF']    = ['/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20151124/reference.high_oil.dat']
-    dat['LF']    = ['/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20151124/reference.high_res.dat']
-    dat['CPP']   = ['/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20151124/cpp.dat']
-    dat['CPPHF'] = ['/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20151124/cpp.high_oil.dat']
-    dat['CPPLF'] = ['/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20151124/cpp.high_res.dat']
-
-    years = list()
-    bic_ESOLPVCEN = dict()
-    bic_ESOLPVDIS = dict()
-    bic_EWNDOFS   = dict()
-    bic_EWNDON    = dict()
-    ic_ESOLPVCEN  = list()
-    ic_ESOLPVDIS  = list()
-    ic_EWNDOFS    = list()
-    ic_EWNDON     = list()
-
-    bic_EWNDOFD   = dict()
-    ic_EWNDOFD    = list()
-    for s in scenarios:
-        print 'Scenario: ', s
-        years, bic_s, ic_s = sensitivity(dat[s], techs)
-        bic_ESOLPVCEN[s], ic_ESOLPVCEN = bic_s['ESOLPVCEN'], ic_s['ESOLPVCEN']
-        bic_EWNDON[s], ic_EWNDON       = bic_s['EWNDON'], ic_s['EWNDON']
-        bic_EWNDOFS[s], ic_EWNDOFS     = bic_s['EWNDOFS'], ic_s['EWNDOFS']
-        bic_EWNDOFD[s], ic_EWNDOFD     = bic_s['EWNDOFD'], ic_s['EWNDOFD']
-    
-    h = plot_breakeven(years, bic_ESOLPVCEN, ic_ESOLPVCEN)
-    plt.title('ESOLPVCEN')
-    plt.savefig('ESOLPVCEN.svg')
-
-    h = plot_breakeven(years, bic_EWNDON, ic_EWNDON)
-    plt.title('EWNDON')
-    plt.savefig('EWNDON.svg')
-
-    h = plot_breakeven(years, bic_EWNDOFS, ic_EWNDOFS)
-    plt.title('EWNDOFS')
-    plt.savefig('EWNDOFS.svg')
-
-    h = plot_breakeven(years, bic_EWNDOFD, ic_EWNDOFD)
-    plt.title('EWNDOFD')
-    plt.savefig('EWNDOFD.svg')
-
-    plt.show()
-
-def do_sensitivity_new():
-    scenarios = ['LF', 'R', 'HD', 'CPPLF', 'CPP', 'CPPHD']
-    # scenarios = ['LF', 'R', 'HF', 'HD', 'CPPLF', 'CPP', 'CPPHF', 'CPPHD']
-    techs = ['EURNALWR15', 'ECOALIGCC', 'ECOALIGCCS', 'ENGACCCCS', 'EBIOIGCC', 'ECOALIGCC_b']
-    # techs = ['ESOLPVCEN', 'EWNDON', 'EWNDOFS', 'ESOLPVDIS']
-    dat = OrderedDict()
-
-    ############################################################################
-    # Normal run
-    # dat['LF'] = [
-    #     '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/results/LF/NCreference.LF.dat'
-    # ]
-    # dat['R'] = [
-    #     '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/results/R/NCreference.R.dat'
-    # ]
-    # dat['HF'] = [
-    #     '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/results/HF/NCreference.HF.dat'
-    # ]
-    # dat['HD'] = [
-    #     '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/results/HD/NCreference.HD.dat'
-    # ]
-    # dat['CPPLF'] = [
-    #     '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/results/CPPLF/NCreference.CPPLF.dat'
-    # ]
-    # dat['CPP'] = [
-    #     '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/results/CPP/NCreference.CPP.dat'
-    # ]
-    # dat['CPPHF'] = [
-    #     '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/results/CPPHF/NCreference.CPPHF.dat'
-    # ]
-    # dat['CPPHD'] = [
-    #     '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/results/CPPHD/NCreference.CPPHD.dat'
-    # ]
-
-    ############################################################################
-    # No RPS run
-    dat['LF'] = [
-        '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/sensitivity_noRSP/NCreference.LF_noRPS.dat'
-    ]
-    dat['R'] = [
-        '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/sensitivity_noRSP/NCreference.R_noRPS.dat'
-    ]
-    dat['HF'] = [
-        '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/sensitivity_noRSP/NCreference.HF_noRPS.dat'
-    ]
-    dat['HD'] = [
-        '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/sensitivity_noRSP/NCreference.HD_noRPS.dat'
-    ]
-    dat['CPPLF'] = [
-        '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/sensitivity_noRSP/NCreference.CPPLF_noRPS.dat'
-    ]
-    dat['CPP'] = [
-        '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/sensitivity_noRSP/NCreference.CPP_noRPS.dat'
-    ]
-    dat['CPPHF'] = [
-        '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/sensitivity_noRSP/NCreference.CPPHF_noRPS.dat'
-    ]
-    dat['CPPHD'] = [
-        '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/sensitivity_noRSP/NCreference.CPPHD_noRPS.dat'
-    ]
-
-    ############################################################################
-    # No RPS and no NG cap run
-    # dat['LF'] = [
-    #     '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/sensitivity_noRPS_noNGcap/NCreference.LF_noRPS.dat'
-    # ]
-    # dat['R'] = [
-    #     '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/sensitivity_noRPS_noNGcap/NCreference.R_noRPS.dat'
-    # ]
-    # dat['HF'] = [
-    #     '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/sensitivity_noRPS_noNGcap/NCreference.HF_noRPS.dat'
-    # ]
-    # dat['HD'] = [
-    #     '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/sensitivity_noRPS_noNGcap/NCreference.HD_noRPS.dat'
-    # ]
-    # dat['CPPLF'] = [
-    #     '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/sensitivity_noRPS_noNGcap/NCreference.CPPLF_noRPS.dat'
-    # ]
-    # dat['CPP'] = [
-    #     '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/sensitivity_noRPS_noNGcap/NCreference.CPP_noRPS.dat'
-    # ]
-    # dat['CPPHF'] = [
-    #     '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/sensitivity_noRPS_noNGcap/NCreference.CPPHF_noRPS.dat'
-    # ]
-    # dat['CPPHD'] = [
-    #     '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/sensitivity_noRPS_noNGcap/NCreference.CPPHD_noRPS.dat'
-    # ]
-
-    ############################################################################
-    # No NG cap run
-    # dat['LF'] = [
-    #     '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/results/LF_noNGcap/NCreference.LF_noNGcap.dat'
-    # ]
-    # dat['R'] = [
-    #     '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/results/R_noNGcap/NCreference.R_noNGcap.dat'
-    # ]
-    # dat['HD'] = [
-    #     '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/results/HD_noNGcap/NCreference.HD_noNGcap.dat'
-    # ]
-    # dat['CPPLF'] = [
-    #     '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/results/CPPLF_noNGcap/NCreference.CPPLF_noNGcap.dat'
-    # ]
-    # dat['CPP'] = [
-    #     '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/results/CPP_noNGcap/NCreference.CPP_noNGcap.dat'
-    # ]
-    # dat['CPPHD'] = [
-    #     '/afs/unity.ncsu.edu/users/b/bli6/TEMOA_NC/sql20170417/results/CPPHD_noNGcap/NCreference.CPPHD_noNGcap.dat'
-    # ]
-
-    years = list()
-    # bic_ESOLPVCEN = dict()
-    # bic_ESOLPVDIS = dict()
-    # bic_EWNDOFS   = dict()
-    # bic_EWNDON    = dict()
-    # ic_ESOLPVCEN  = list()
-    # ic_ESOLPVDIS  = list()
-    # ic_EWNDOFS    = list()
-    # ic_EWNDON     = list()
-
-    for s in scenarios:
-        print 'Scenario: ', s
-        years, bic_s, ic_s = sensitivity(dat[s], techs)
-        # bic_ESOLPVCEN[s], ic_ESOLPVCEN = bic_s['ESOLPVCEN'], ic_s['ESOLPVCEN']
-        # bic_ESOLPVDIS[s], ic_ESOLPVDIS = bic_s['ESOLPVDIS'], ic_s['ESOLPVDIS']
-        # bic_EWNDON[s], ic_EWNDON       = bic_s['EWNDON'], ic_s['EWNDON']
-        # bic_EWNDOFS[s], ic_EWNDOFS     = bic_s['EWNDOFS'], ic_s['EWNDOFS']
-    
-    for t in techs:
-        h = plot_breakeven(years, bic_s[t], ic_s[t])
-        plt.title(t)
-        plt.savefig(t + '.svg')
-
-    # h = plot_breakeven(years, bic_ESOLPVCEN, ic_ESOLPVCEN)
-    # plt.title('ESOLPVCEN')
-    # plt.savefig('ESOLPVCEN.svg')
-
-    # h = plot_breakeven(years, bic_ESOLPVDIS, ic_ESOLPVDIS)
-    # plt.title('ESOLPVDIS')
-    # plt.savefig('ESOLPVDIS.svg')
-
-    # h = plot_breakeven(years, bic_EWNDON, ic_EWNDON)
-    # plt.title('EWNDON')
-    # plt.savefig('EWNDON.svg')
-
-    # h = plot_breakeven(years, bic_EWNDOFS, ic_EWNDOFS)
-    # plt.title('EWNDOFS')
-    # plt.savefig('EWNDOFS.svg')
-
-    # plt.show()
 
 def LC_calculate(dat):
 
