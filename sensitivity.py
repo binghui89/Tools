@@ -283,7 +283,7 @@ def sensitivity_api(dat, techs, algorithm=None):
         print("Exception raised during solve")
         return
 
-    vintages = instance.vintage_optimize
+    vintages = list(instance.vintage_optimize)
     coef_CAP = dict()
     scal_CAP = dict()
     # Break-even investment cost for this scenario, indexed by technology
@@ -326,7 +326,7 @@ def sensitivity_api(dat, techs, algorithm=None):
             scal_CAP[t, v]*instance.CostFixed[v, t, v], # Use the FC of the first period
             instance.CostInvest[t,v],
             instance.CostFixed[v, t, v],
-            c.solution.get_values(target_var)
+            cap_s[t][vintages.index(v)]
             )
 
 def bin_search(tech, vintage, dat, eps = 0.01, all_v = False):
