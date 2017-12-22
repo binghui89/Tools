@@ -998,15 +998,14 @@ def plot_NCdemand_all():
 
     plt.ylabel('Electricity Generation (TWh)')
     plt.xlabel('Year')
-    ax.yaxis.grid(True)
-    ax.xaxis.grid(True)
-    box = ax.get_position()
-    ax.set_position([box.x0, box.y0, box.width*0.9, box.height])
+    # ax.yaxis.grid(True)
+    # ax.xaxis.grid(True)
+    # box = ax.get_position()
+    # ax.set_position([box.x0, box.y0, box.width*0.9, box.height])
     ax.legend(handles, 
-                ['BIO', 'OIL', 'HYD', 'NGA', 'PUM', 'SOL', 'COA', 'NUC'], 
-                # ['BIO', 'HYD', 'NGA', 'SOL', 'COA', 'NUC'], 
-                bbox_to_anchor = (1.01, 0.5), 
-                loc='center left')
+                ['Bioenergy', 'Oil', 'Hydro', 'Natural gas', 'Pumped hydro', 'Solar PV', 'Coal', 'Nuclear'], 
+                # bbox_to_anchor = (1.01, 0.5), 
+                loc='lower right')
     ax.annotate('2015', xy=(2015, 200), xytext=(2013, 201), color='r')
     # ax.annotate('Reference', 
     #             xy=(2050, 616/3.6), xytext=(2053, 610/3.6), 
@@ -1037,6 +1036,8 @@ def plot_NCdemand_all():
     #             )
 
     ax.axvline(x=2015, color='r')
+    ax.set_xlim([1990, 2050])
+    ax.set_ylim([0, 200])
     plt.show()
 
 def plot_emis_all(*arg):
