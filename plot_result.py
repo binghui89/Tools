@@ -1149,8 +1149,8 @@ def plot_emis_all(*arg):
     plt.ylabel('Emissions (kilotonnes)')
     plt.xlabel('Year')
     plt.title(r'(b) $\mathregular{NO}_\mathregular{X}$ Emissions')
-    ax.yaxis.grid(True)
-    ax.xaxis.grid(True)
+    # ax.yaxis.grid(True)
+    # ax.xaxis.grid(True)
     # box = ax.get_position()
     # ax.set_position([box.x0, box.y0, box.width*0.9, box.height])
     ax.legend(handles, 
@@ -1161,6 +1161,8 @@ def plot_emis_all(*arg):
                 color='r', 
                 rotation=90)
     ax.axvline(x=2015, color='r')
+    ax.set_ylim([0, 300])
+    ax.set_xlim([1990, 2050])
 
     # SO2 emissions in metric tons
     ############################################################################
@@ -1218,8 +1220,8 @@ def plot_emis_all(*arg):
     plt.ylabel('Emissions (kilotonnes)')
     plt.xlabel('Year')
     plt.title(r'(a) $\mathregular{SO}_2$ Emissions')
-    ax.yaxis.grid(True)
-    ax.xaxis.grid(True)
+    # ax.yaxis.grid(True)
+    # ax.xaxis.grid(True)
     # box = ax.get_position()
     # ax.set_position([box.x0, box.y0, box.width*0.9, box.height])
     ax.legend(handles, 
@@ -1231,6 +1233,8 @@ def plot_emis_all(*arg):
                 color='r', 
                 rotation=90)
     ax.axvline(x=2015, color='r')
+    ax.set_ylim([0, 600])
+    ax.set_xlim([1990, 2050])
 
     # CO2 emissions in metric tons
     ############################################################################
@@ -1294,8 +1298,8 @@ def plot_emis_all(*arg):
     plt.ylabel('Emissions (megatonnes)')
     plt.xlabel('Year')
     plt.title(r'$\mathregular{CO}_2$ Emissions')
-    ax.yaxis.grid(True)
-    ax.xaxis.grid(True)
+    # ax.yaxis.grid(True)
+    # ax.xaxis.grid(True)
     # box = ax.get_position()
     # ax.set_position([box.x0, box.y0, box.width*0.9, box.height])
     ax.legend(handles, 
@@ -1306,6 +1310,8 @@ def plot_emis_all(*arg):
                 color='r', 
                 rotation=90)
     ax.axvline(x=2015, color='r')
+    ax.set_ylim([0, 80])
+    ax.set_xlim([1990, 2050])
 
     # if len(arg) > 0:
     #     fname = arg[0]
