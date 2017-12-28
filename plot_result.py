@@ -513,7 +513,7 @@ def plot_stochastic_obj(l_scale, directory, run, scenarios, db_name):
         plt.legend(handles=handles, loc='upper left')
         plt.title('Cost x {}%'.format(scale))
         plt.xlabel(r'$p_{CP}$')
-        plt.ylabel('Certainty equivalent (billion $)')
+        plt.ylabel('Certain equivalent (billion $)')
 
     # plt.figure(nfigure+1)
     # plt.plot(l_scale, x_cross, '--ks')
