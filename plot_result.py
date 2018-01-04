@@ -430,7 +430,7 @@ def plot_stochastic_obj(l_scale, directory, run, scenarios, db_name):
             obj_all.append( sum([obj[s]*p[s] for s in p])/1E3 ) # Convert million $ into billion $
         return [i/100.0 for i in p_cp_all], obj_all
 
-    MS = 3 # Marker size
+    MS = 5 # Marker size
     LW = 0.5 # Linewidth
     x_cross = list()
     y_cross = list()
@@ -511,7 +511,15 @@ def plot_stochastic_obj(l_scale, directory, run, scenarios, db_name):
         #     y_cross.append(y)
         #     plt.plot(x, y, 'xs')
         plt.legend(handles=handles, loc='upper left')
-        plt.title('Cost x {}%'.format(scale))
+        if scale == 50:
+            plt.title('(a) Cost x {}%'.format(scale))
+        elif scale in [60, 100]:
+            plt.title('(b) Cost x {}%'.format(scale))
+        elif scale == 80:
+            plt.title('(c) Cost x {}%'.format(scale))
+        else:
+            plt.title('Cost x {}%'.format(scale))
+
         plt.xlabel(r'$p_{CP}$')
         plt.ylabel('Certain equivalent (billion $)')
 
