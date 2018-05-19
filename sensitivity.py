@@ -84,6 +84,7 @@ def validate_coef(c0, instance, target_tech, target_year):
     t = target_tech
     v = target_year
     P_0 = min( instance.time_optimize )
+    P_e = instance.time_future.last()
     GDR = value( instance.GlobalDiscountRate )
     MLL = instance.ModelLoanLife
     MPL = instance.ModelProcessLife
@@ -101,19 +102,14 @@ def validate_coef(c0, instance, target_tech, target_year):
                 * ( 1 - x **( -value(LLN[t, v]) ) ) 
                 / GDR) 
                 ) 
+    ) * (
+		  (
+			  1 -  x**( -min( value(instance.LifetimeProcess[t, v]), P_e - v ) )
+		  )
+		  /(
+			  1 -  x**( -value( instance.LifetimeProcess[t, v] ) ) 
+		  )
     )
-
-    c_s = (-1)*(
-        value( instance.CostInvest[t, v] )
-        * value( instance.SalvageRate[t, v] )
-        / ( 1 if not GDR else 
-            (1 + GDR)**( 
-                instance.time_future.last() 
-                - instance.time_future.first()
-                - 1
-                ) 
-            )
-        )
 
     c_f = sum( 
         instance.CostFixed[p, t, v]
@@ -124,7 +120,7 @@ def validate_coef(c0, instance, target_tech, target_year):
             )
         for p in period_available 
     ) 
-    c = c_i + c_s + c_f
+    c = c_i + c_f
 
     if (c - c0) <= 1E-5:
         return True
@@ -256,6 +252,7 @@ def sensitivity_api(dat, techs, algorithm=None):
     os.remove('tmp.lp')
     c.set_results_stream(None) # Turn screen output off
 
+    msg = ''
     if algorithm:
         if algorithm == "o":
             c.parameters.lpmethod.set(c.parameters.lpmethod.values.auto)
@@ -314,6 +311,8 @@ def sensitivity_api(dat, techs, algorithm=None):
             cap_s[t].append( c.solution.get_values(target_var) )
 
         print "{:>10s}\t{:>7s}\t{:>6s}\t{:>4s}\t{:>6s}\t{:>5s}\t{:>7s}\t{:>7s}\t{:>5s}\t{:>3s}\t{:>5s}".format('Tech','Vintage', 'L. CB', 'Coef', 'U. CB', 'Scale', 'BE IC', 'BE FC', 'IC', 'FC', 'Cap')
+        msg += "{:>10s}\t{:>7s}\t{:>6s}\t{:>4s}\t{:>6s}\t{:>5s}\t{:>7s}\t{:>7s}\t{:>5s}\t{:>3s}\t{:>5s}".format('Tech','Vintage', 'L. CB', 'Coef', 'U. CB', 'Scale', 'BE IC', 'BE FC', 'IC', 'FC', 'Cap')
+        msg == '\n'
         for v in vintages:
             print "{:>10s}\t{:>7g}\t{:>6.0f}\t{:>4.0f}\t{:>6.0f}\t{:>5.3f}\t{:>7.1f}\t{:>7.1f}\t{:>5.0f}\t{:>3.0f}\t{:>5.3f}".format(
             t,
@@ -328,6 +327,23 @@ def sensitivity_api(dat, techs, algorithm=None):
             instance.CostFixed[v, t, v],
             cap_s[t][vintages.index(v)]
             )
+
+            msg += "{:>10s}\t{:>7g}\t{:>6.0f}\t{:>4.0f}\t{:>6.0f}\t{:>5.3f}\t{:>7.1f}\t{:>7.1f}\t{:>5.0f}\t{:>3.0f}\t{:>5.3f}".format(
+            t,
+            v, 
+            clb_s[t, v],
+            coef_CAP[t, v],
+            cub_s[t, v],
+            scal_CAP[t, v],
+            scal_CAP[t, v]*instance.CostInvest[t, v], 
+            scal_CAP[t, v]*instance.CostFixed[v, t, v], # Use the FC of the first period
+            instance.CostInvest[t,v],
+            instance.CostFixed[v, t, v],
+            cap_s[t][vintages.index(v)]
+            )
+            msg += '\n'
+    
+    return msg
 
 def bin_search(tech, vintage, dat, eps = 0.01, all_v = False):
     # Sensitivity analysis by binary search to find break-even scaling factor 
@@ -379,6 +395,22 @@ def bin_search(tech, vintage, dat, eps = 0.01, all_v = False):
 
     counter = 0
     scale_this = scale_u # Starting scale
+
+    print 'Iteration # {} starts at {} s'.format( counter, time_mark() )
+    instance = model.create_instance(data)
+    instance.preprocess()
+    results = optimizer.solve(instance, suffixes=['dual', 'urc', 'slack', 'lrc'])
+    instance.solutions.load_from(results)
+    cap_target = value( instance.V_Capacity[monitor_tech, monitor_year] )
+    print 'Iteration # {} solved at {} s'.format( counter, time_mark() )
+    print 'Iteration # {}, scale: {:1.2f}, capacity: {} GW'.format( 
+        counter,
+        scale_this,
+        cap_target
+    )
+    if 1.0 - scale_this <= eps and cap_target > 0:
+        return scale_this
+
     while (scale_u - scale_l) >= eps and counter <= 20:
         if cap_target <= 0:
             scale_u = scale_this
