@@ -11,6 +11,76 @@ generation_aeo17   = [65, 62, 66, 71, 69, 68, 69, 72]
 transmission_aeo17 = [11, 12, 13, 13, 14, 14, 14, 14]
 distribution_aeo17 = [29, 31, 33, 31, 32, 32, 32, 32]
 
+cost_var_coal = {
+	'L': {
+		(2015, ): 2.63,
+		(2020, ): 2.65,
+		(2025, ): 2.59,
+		(2030, ): 2.59,
+		(2035, ): 2.64,
+		(2040, ): 2.70,
+		(2045, ): 2.67,
+		(2050, ): 2.67,
+	},
+	'H': {
+		(2015, ): 2.62,
+		(2020, ): 2.79,
+		(2025, ): 2.70,
+		(2030, ): 2.66,
+		(2035, ): 2.74,
+		(2040, ): 2.85,
+		(2045, ): 2.89,
+		(2050, ): 2.94,
+	}
+}
+
+cost_var_ng = {
+	'L': {
+		(2015, ): 3.74,
+		(2020, ): 4.21,
+		(2025, ): 4.23,
+		(2030, ): 4.44,
+		(2035, ): 4.20,
+		(2040, ): 4.29,
+		(2045, ): 4.06,
+		(2050, ): 4.09,
+	},
+	'H': {
+		(2015, ):  3.74,
+		(2020, ):  5.38,
+		(2025, ):  7.71,
+		(2030, ):  9.00,
+		(2035, ):  9.41,
+		(2040, ): 10.19,
+		(2045, ): 10.07,
+		(2050, ): 10.07,
+	}
+}
+
+cost_var_oil = {
+	'L': {
+		(2015, ): 14.09,
+		(2020, ): 16.65,
+		(2025, ): 18.81,
+		(2030, ): 20.50,
+		(2035, ): 20.31,
+		(2040, ): 21.68,
+		(2045, ): 21.79,
+		(2050, ): 22.56,
+	},
+	'H':{
+		(2015, ): 14.27,
+		(2020, ): 17.04,
+		(2025, ): 19.41,
+		(2030, ): 21.05,
+		(2035, ): 22.34,
+		(2040, ): 24.02,
+		(2045, ): 24.47,
+		(2050, ): 25.26,
+	}
+}
+
+
 def plot_LCOE(LCOI, LCOF, LCOV):
 	# This function makas a figure that displays the LCOEs during the optimized
 	# periods from each of the 6 scenarios.
@@ -129,9 +199,10 @@ def plot_LCOE(LCOI, LCOF, LCOV):
 
 	plt.show()
 
-def LC_calculate_db(db):
+def LC_calculate_db(db, selected_scenario):
 
-	def return_LoanAnnualize ( t, v ):		
+	def return_LoanAnnualize ( t, v ):
+		# Return loan annualization factor
 		if (t, v) in DiscountRate:
 			dr = DiscountRate[t, v]
 		else:
@@ -144,18 +215,19 @@ def LC_calculate_db(db):
 		annualized_rate = ( dr / (1.0 - (1.0 + dr)**(-lln) ))
 		return annualized_rate
 
-	def return_SalvageRate( t, v ):
-		P_0  = periods[0]
-		if t in LifetimeTech:
-			n = LifetimeTech[t]
-		else:
-			n = 30
-		L    = f_periods[-1] - f_periods[0]
-
-		if P_0 + L - v >= n:
-			return 0
-		else:
-			return 1 - (P_0 + L - v)/n # Linear depreciation
+	def update_scenario_cost( CostVariable, selected_scenario):
+		if 'L' in selected_scenario:
+			for key, value in cost_var_coal['L'].iteritems():
+				p = key[0]
+				CostVariable[p, 'IMPELCCOAB',  2015]  = value
+				CostVariable[p, 'IMPELCNGAEA', 2015] = cost_var_ng['L'][key]
+				CostVariable[p, 'IMPELCDSLEA', 2015] = cost_var_oil['L'][key]
+		if 'H' in selected_scenario:
+			for key, value in cost_var_coal['H'].iteritems():
+				p = key[0]
+				CostVariable[p, 'IMPELCCOAB',  2015]  = value
+				CostVariable[p, 'IMPELCNGAEA', 2015] = cost_var_ng['H'][key]
+				CostVariable[p, 'IMPELCDSLEA', 2015] = cost_var_oil['H'][key]
 
 	con = sqlite3.connect(db)
 	cur = con.cursor()
@@ -164,11 +236,11 @@ def LC_calculate_db(db):
 	cur.execute(qry)
 	db_time_periods = cur.fetchall()
 
-	qry = 'SELECT * FROM Output_V_Capacity'
+	qry = 'SELECT * FROM Output_V_Capacity WHERE scenario IS "' + selected_scenario + '"'
 	cur.execute(qry)
 	db_V_Capacity = cur.fetchall()
 
-	qry = "SELECT * FROM Output_VFlow_Out"
+	qry = "SELECT * FROM Output_VFlow_Out WHERE scenario IS '" + selected_scenario + "'"
 	cur.execute(qry)
 	db_VFlow_Out = cur.fetchall()
 
@@ -200,7 +272,7 @@ def LC_calculate_db(db):
 	cur.execute(qry)
 	db_DiscountRate = cur.fetchall()
 
-	qry = 'SELECT * FROM Output_Objective'
+	qry = 'SELECT * FROM Output_Objective WHERE scenario IS "' + selected_scenario + '"'
 	cur.execute(qry)
 	db_Objective = cur.fetchall()
 
@@ -209,7 +281,8 @@ def LC_calculate_db(db):
 	V_Capacity = dict()
 	for row in db_V_Capacity:
 		scenario, sector, t, v, value = row
-		V_Capacity[t, v] = value
+		if scenario == selected_scenario:
+			V_Capacity[t, v] = value
 
 	CostInvest = dict()
 	for row in db_CostInvest:
@@ -225,6 +298,9 @@ def LC_calculate_db(db):
 	for row in db_CostVariable:
 		p, t, v, value, unit, notes = row
 		CostVariable[p, t, v] = value
+		# Because fuel costs in the L and H scenarios are different from R, we
+		# have to update it manually.
+	update_scenario_cost(CostVariable, selected_scenario)
 
 	LifetimeTech = dict()
 	for row in db_LifetimeTech:
@@ -257,18 +333,18 @@ def LC_calculate_db(db):
 	for row in db_VFlow_Out:
 		scenario, sector, p, s, d, i, t, v, o, value = row
 		# Scenario, sector, period, season, tod, input, tech, vintage, output, value
-		if (p, t, v) in V_ActivityByPeriodAndProcess:
-			V_ActivityByPeriodAndProcess[p, t, v] += value
-		else:
-			V_ActivityByPeriodAndProcess[p, t, v] = value
-		# if o == 'ELC':
-		if o == 'ELCDMD':
-			pindex = periods.index(p) # period index
-			TAE[pindex] += value/3.6 # Convert PJ into TWh
+		if scenario == selected_scenario:
+			if (p, t, v) in V_ActivityByPeriodAndProcess:
+				V_ActivityByPeriodAndProcess[p, t, v] += value
+			else:
+				V_ActivityByPeriodAndProcess[p, t, v] = value
+			if o == 'ELCDMD':
+				pindex = periods.index(p) # period index
+				TAE[pindex] += value/3.6 # Convert PJ into TWh
 
 	# Note TAC_by_year is total annualized cost by year, not by period.
-	# Periods: 2015, 2020, 2025 ... 2050, 2055 (2055 is the stopping period)
-	# Years: 2015, 2016, 2017 ... 2050, 2051, 2052, 2053, 2054
+	# Active periods: 2015, 2020, 2025 ... 2050, 2055 (2055 is the stopping year)
+	# Active years: 2015, 2016, 2017 ... 2050, 2051, 2052, 2053, 2054
 	# Note that each period is represented by its first year, e.g., The period
 	# represented by 2015 include five years: 2015, 2016, 2017, 2018, 2019
 	years   = range(f_periods[0], f_periods[-1])
@@ -283,46 +359,49 @@ def LC_calculate_db(db):
 
 	for S_t, S_v in CostInvest:
 		if (S_t, S_v) in V_Capacity:
-			SalvageRate = return_SalvageRate(S_t, S_v)
-			TAC_by_year[-1] += -1*(
-				V_Capacity[S_t, S_v]
-				* CostInvest[S_t, S_v]
-				* SalvageRate
-				)
-
-	for S_t, S_v in CostInvest:
-		if (S_t, S_v) in V_Capacity:
-			LoanAnnualize = return_LoanAnnualize(S_t, S_v)
-			pindex = periods.index(S_v)
-			
 			if S_t in LifetimeLoanTech:
 				lln = int( LifetimeLoanTech[S_t] )
 			else:
 				lln = 10
-
-			for i in range(pindex, len(periods)):
-				# The loan payment last from the 0th year to the (n-1)th year 
-				# where n is the lifetime of loan, which defaults to 10 years.
-				if periods[i] - S_v < lln:
-					TAIC[i] += (
-						CostInvest[S_t, S_v]
-						*LoanAnnualize
-						*V_Capacity[S_t, S_v]
-					)
-			
-			# Calculate all years LCOE, i.e., 2015, 2016 ... 2054
-			this_payment = (
+			if S_t in LifetimeTech:
+				lp = int( LifetimeTech[S_t] )
+			else:
+				lp = 30
+			LoanAnnualize_factor = return_LoanAnnualize(S_t, S_v)
+			LoanAnnualize = (
 				CostInvest[S_t, S_v]
-				*LoanAnnualize
+				*LoanAnnualize_factor
 				*V_Capacity[S_t, S_v]
 			)
-			for i in range(0, lln):
+			LoanNPV = (
+				LoanAnnualize * 
+				(
+					1 - (1 + GDR)**(-lln)
+				) /
+				GDR
+			) # NPV of all loan payments, including those beyond end of model horizon
+			LoanAmortize = (
+				LoanNPV * 
+				GDR /
+				(
+					1 - (1 + GDR)**(-lp)
+				)
+			) # Amortized loan NPV over process lifetime (lp)
+
+			vindex = periods.index(S_v)
+
+			for i in range(vindex, len(periods)):
+				# The loan payment last from the 0th year to the (n-1)th year 
+				# where n is the lifetime of loan, which defaults to 10 years.
+				if periods[i] - S_v < lp:
+					TAIC[i] += LoanAmortize
+			
+			# Calculate all years LCOE, i.e., 2015, 2016 ... 2054
+			this_payment = LoanAmortize
+			for i in range(0, lp):
 				this_year = S_v + i
 				if this_year in years:
 					TAC_by_year[years.index(this_year)] += this_payment
-				else:
-					years.append(this_year)
-					TAC_by_year.append(this_payment)
 
 	for S_p, S_t, S_v in CostFixed:
 		if (S_t, S_v) in V_Capacity:
@@ -376,7 +455,11 @@ def LC_calculate_db(db):
 	# periods.
 	# If the LCOE calculation is correct, then the two methods should give 
 	# identical solutions.
-	NPV_1 = db_Objective[0][-1]
+	for row in db_Objective:
+		scenario, name, value = row
+		if scenario == selected_scenario:
+			NPV_1 = value
+			break
 	NPV_2 = sum( [ TAC_by_year[i]/(1 + GDR)**i for i in range(0, len(TAC_by_year)) ] )
 	deltaNPV = NPV_2 - NPV_1
 	print 'Total NPV error is {:3.3f} %'.format(100*deltaNPV/NPV_1)
@@ -744,10 +827,11 @@ if __name__ == "__main__":
 		plot_LCOE(LCOI, LCOF, LCOV)
 	else:
 		db = sys.argv[1]
-		# (LCOI, LCOF, LCOV) = LC_calculate_db(db)
-		# LCOE = [LCOI[i] + LCOF[i] + LCOV[i] for i in range(0, len(LCOI))]
-		# for y, lcoe in zip(range(2015, 2055, 5), LCOE):
-		# 	print '{}   {:4.2f}   {}'.format(y, lcoe, '$/MWh')
+		s  = sys.argv[2]
+		(LCOI, LCOF, LCOV) = LC_calculate_db(db, s)
+		LCOE = [LCOI[i] + LCOF[i] + LCOV[i] for i in range(0, len(LCOI))]
+		for y, lcoe in zip(range(2015, 2055, 5), LCOE):
+			print '{}   {:4.2f}   {}'.format(y, lcoe, '$/MWh')
 
-		LC_db(db)
+		# LC_db(db)
 
