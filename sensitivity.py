@@ -6,6 +6,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 from collections import OrderedDict, defaultdict
 from time import time
+import pandas as pd
 from IPython import embed as IP
 
 if platform.system() == 'Linux':
@@ -242,11 +243,8 @@ def sensitivity(dat, techs):
                 for tod in instance.time_of_day:
                     print p, s, tod, instance.dual[instance.DemandConstraint[p,s,tod,c]], instance.slack[instance.DemandConstraint[p,s,tod,c]]
 
-def sensitivity_api(dat, techs, algorithm=None):
+def sensitivity_api(instance, techs, algorithm=None):
     import cplex
-    model    = return_Temoa_model()
-    data     = return_Temoa_data(model, dat)
-    instance = model.create_instance(data)
     instance.write('tmp.lp', io_options={'symbolic_solver_labels':True})
     c = cplex.Cplex('tmp.lp')
     os.remove('tmp.lp')
@@ -290,6 +288,7 @@ def sensitivity_api(dat, techs, algorithm=None):
     cap_s    = dict()
     clb_s    = dict()
     cub_s    = dict()
+    results  = list()
     for t in techs:
         bic_s[t] = list()
         ic_s[t]  = list()
@@ -314,6 +313,29 @@ def sensitivity_api(dat, techs, algorithm=None):
         msg += "{:>10s}\t{:>7s}\t{:>6s}\t{:>4s}\t{:>6s}\t{:>5s}\t{:>7s}\t{:>7s}\t{:>5s}\t{:>3s}\t{:>5s}".format('Tech','Vintage', 'L. CB', 'Coef', 'U. CB', 'Scale', 'BE IC', 'BE FC', 'IC', 'FC', 'Cap')
         msg == '\n'
         for v in vintages:
+            deployed = abs(cap_s[t][vintages.index(v)]) >= 1E-3
+            tmp_beic_cs = instance.CostInvest[t, v] if deployed else scal_CAP[t, v]*instance.CostInvest[t, v]
+            tmp_befc_cs = instance.CostFixed[v, t, v] if deployed else scal_CAP[t, v]*instance.CostFixed[v, t, v]
+            tmp_bes_cs  = 1 if deployed else scal_CAP[t, v]
+            row = {
+                'algorithm':         algorithm,
+                'scenario':          None,
+                'technology':        t,
+                'vintage':           v,
+                'coef lower bound':  clb_s[t, v],
+                'coefficient':       coef_CAP[t, v],
+                'coef upper bound':  cub_s[t, v],
+                'scale':             scal_CAP[t, v],
+                'BE IC':             scal_CAP[t, v]*instance.CostInvest[t, v], 
+                'BE FC':             scal_CAP[t, v]*instance.CostFixed[v, t, v],
+                'IC':                instance.CostInvest[t,v],
+                'FC':                instance.CostFixed[v, t, v],
+                'capacity':          cap_s[t][vintages.index(v)],
+                'BE IC (CS)':        tmp_beic_cs, 
+                'BE FC (CS)':        tmp_befc_cs,
+                'scale (CS)':        tmp_bes_cs,
+            }
+            results.append(row)
             print "{:>10s}\t{:>7g}\t{:>6.0f}\t{:>4.0f}\t{:>6.0f}\t{:>5.3f}\t{:>7.1f}\t{:>7.1f}\t{:>5.0f}\t{:>3.0f}\t{:>5.3f}".format(
             t,
             v, 
@@ -343,7 +365,7 @@ def sensitivity_api(dat, techs, algorithm=None):
             )
             msg += '\n'
     
-    return msg
+    return msg, pd.DataFrame(results)
 
 def bin_search(tech, vintage, dat, eps = 0.01, all_v = False):
     # Sensitivity analysis by binary search to find break-even scaling factor 
@@ -794,12 +816,12 @@ def explore_Cost_marginal(dat):
             if (p, e) in instance.EmissionLimitConstraint:
                 print p, e, instance.dual[instance.EmissionLimitConstraint[p, e]], '\t', instance.slack[instance.EmissionLimitConstraint[p, e]]
 
-    print 'Dual and slack variables for Commodity Demand Constraints'
-    for c in instance.commodity_demand:
-        for p in instance.time_optimize:
-            for s in instance.time_season:
-                for tod in instance.time_of_day:
-                    print p, s, tod, instance.dual[instance.DemandConstraint[p,s,tod,c]], instance.slack[instance.DemandConstraint[p,s,tod,c]]
+    # print 'Dual and slack variables for Commodity Demand Constraints'
+    # for c in instance.commodity_demand:
+    #     for p in instance.time_optimize:
+    #         for s in instance.time_season:
+    #             for tod in instance.time_of_day:
+    #                 print p, s, tod, instance.dual[instance.DemandConstraint[p,s,tod,c]], instance.slack[instance.DemandConstraint[p,s,tod,c]]
 
 def LC_calculate(dat):
 
