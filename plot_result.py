@@ -50,7 +50,7 @@ tech_map = {
     'ELFGGTR':      'BIO',
     'EHYDGS':       'GSR',
     'EE':           'EE',
-    'EURNSMR':      'SMR',
+    'EURNSMR':      'NUC',
     }
 
 emis_map = {

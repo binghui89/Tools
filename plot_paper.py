@@ -4,6 +4,7 @@ from openpyxl import Workbook, load_workbook
 from matplotlib import ticker, gridspec, pyplot as plt
 import sys, platform
 from IPython import embed as IP
+import pandas as pd
 
 if platform.system() == 'Linux':
     sys.path.append("/afs/unity.ncsu.edu/users/b/bli6/temoa/temoa_model")
@@ -67,7 +68,7 @@ def plot_6bars(ax, periods, colortypes, scenarios, values):
 
     return handles
 
-def plot_breakeven(ax, years, scenarios, bic, ic, i_subplot):
+def plot_breakeven(ax, years, scenarios, bic, ic, i_subplot=None):
     # bic is a dictionary, ic is a list of the raw investment costs
     # ic = [x, x, ..., x], the length of which equals to the length of years
     # bic[scenario] = [x, x, x... x] where the length equals to the number 
@@ -79,7 +80,11 @@ def plot_breakeven(ax, years, scenarios, bic, ic, i_subplot):
         'H':     'black',
         'CPP-L': 'green',
         'CPP-R': 'green',
-        'CPP-H': 'green'
+        'CPP-H': 'green',
+        'cap-L': 'green',
+        'cap-R': 'green',
+        'cap-H': 'green',
+
     }
 
     sen_lstyle_map = {
@@ -89,7 +94,10 @@ def plot_breakeven(ax, years, scenarios, bic, ic, i_subplot):
         'H':     'dotted',
         'CPP-L': '--',
         'CPP-R': '-',
-        'CPP-H': 'dotted'
+        'CPP-H': 'dotted',
+        'cap-L': '--',
+        'cap-R': '-',
+        'cap-H': 'dotted',
     }
 
     sen_marker_map = {
@@ -99,7 +107,10 @@ def plot_breakeven(ax, years, scenarios, bic, ic, i_subplot):
         'H':     's',
         'CPP-L': 's',
         'CPP-R': 's',
-        'CPP-H': 's'
+        'CPP-H': 's',
+        'cap-L': 's',
+        'cap-R': 's',
+        'cap-H': 's',
     }
 
     handles = list()
@@ -125,11 +136,12 @@ def plot_breakeven(ax, years, scenarios, bic, ic, i_subplot):
     ymax = ymax - ymax%100 + 100
     ax.set_ylim(0, ymax)
     ax.set_xticks(years)
-    ax.annotate(
-        i_subplot,
-        xy=(0.1, 0.9), xycoords='axes fraction',
-        xytext=(.1, .9), textcoords='axes fraction',
-            )
+    if i_subplot:
+        ax.annotate(
+            i_subplot,
+            xy=(0.1, 0.9), xycoords='axes fraction',
+            xytext=(.1, .9), textcoords='axes fraction',
+                )
     return handles
 
 def plot_marginalCO2():
@@ -179,7 +191,7 @@ def plot_marginalCO2():
     ax.set_ylabel(r'\$/tonne $\mathregular{CO}_2$')
     return fig
 
-wb1 = load_workbook('Graph.EST.xlsx', data_only=True)
+# wb1 = load_workbook('Graph.EST.xlsx', data_only=True)
 # Size of each individual subplot, in inch
 hfig = 4
 wfig = 10
@@ -191,7 +203,7 @@ def cap_and_act(db):
     attributes = ['activities', 'capacities']
     for a in attributes:
         ax.append( plt.subplot(gs[attributes.index(a)]) )
-        scenarios  = ['L', 'R', 'H', 'CPPL', 'CPP', 'CPPH']
+        scenarios  = ['L', 'R', 'H', 'capL', 'capR', 'capH']
         values     = dict()
         periods    = None
         for s in scenarios:
@@ -243,9 +255,9 @@ def cap_and_act(db):
     plt.subplots_adjust(left=0.06, right=0.94, top=0.99, wspace=0, hspace=0)
     return fig
 
-def emissions_new(db):
+def emissions(db):
     emissions = ['so2_ELC', 'nox_ELC', 'co2_ELC']
-    scenarios = ['L', 'R', 'H', 'CPPL', 'CPP', 'CPPH']
+    scenarios = ['L', 'R', 'H', 'capL', 'capR', 'capH']
 
     fig = plt.figure(figsize=(wfig, hfig*3), dpi=80, facecolor='w', edgecolor='k')
     gs = gridspec.GridSpec(3, 1, height_ratios=[1, 1, 1]) 
@@ -264,9 +276,20 @@ def emissions_new(db):
                 if t_full not in values:
                     values[t_full] = dict()
                 values[t_full][s] = instance.emissions1[e][t]
+                if e == 'co2_ELC':
+                    values[t_full][s] = [
+                        i/1000.0 for i in instance.emissions1[e][t]
+                    ] # kilotonne to megatonne
+                else:
+                    values[t_full][s] = instance.emissions1[e][t]
             if 'Emission reduction' not in values:
                 values['Emission reduction'] = dict()
-            values['Emission reduction'][s] = instance.emis_redct[e]
+            if e == 'co2_ELC':
+                values['Emission reduction'][s] = [
+                    i/1000.0 for i in instance.emis_redct[e]
+                ]
+            else:
+                values['Emission reduction'][s] = instance.emis_redct[e]
 
         technology = values.keys()
         if 'other' in technology:
@@ -476,44 +499,3 @@ def CF_solar_wind_load():
         ncol=3,
     )
     return fig
-
-if __name__ == "__main__":
-    # # Chapter 3, Fig 3.3
-    fig = plot_marginalCO2()
-    # fig.savefig('fig3_3.pdf', format='pdf')
-
-    # # Appendix Fig B.1, need to save manually
-    # plot_NCdemand_all()
-
-    # Appendix Fig B.2, run FERC714.py
-
-    # # Appendix Fig B.4, capacity factor and load as a function of time slices
-    # fig = CF_solar_wind_load()
-    # fig.savefig('figB_4.pdf', format='pdf')
-
-    # # Appendix Fig B.5, SO2 and NOX emissions,  need to save manually
-    # # Appendix Fig B.9 and Chapter 4 Fig 4.5, need to change code, need to save manually
-    # plot_emis_all()
-
-    # # Appendix Fig B.11, without NG supply limits
-    # tabs = ['Act Analysis noNGcap (6 bars)', 'Cap Analysis noNGcap (6 bars)']
-    # fig = cap_and_act(tabs)
-    # fig.savefig('figB_11.pdf', format='pdf')
-
-    # # Appendix Fig B.12, without NG supply limits
-    # fig = emissions('Emissions noNGcap (6 bars)')
-    # fig.savefig('figB_12.pdf', format='pdf')
-
-    figs = break_even()
-    # figs[0].savefig('fig3_4.pdf', format='pdf')
-    # figs[1].savefig('figB_10.pdf', format='pdf')
-
-    db = 'C:\\Users\\bxl180002\\OneDrive\\Tmp_TEMOA_paper\\Results201803\\NCreference.db'
-    # Chapter 3, Fig 3.1, with NG supply limits
-    fig = cap_and_act(db)
-    # fig.savefig('fig3_1.pdf', format='pdf')
-
-    # Chapter 3, Fig 3.2, with NG supply limits
-    fig = emissions_new(db)
-    # fig.savefig('fig3_2.pdf', format='pdf')
-    plt.show()
