@@ -3,133 +3,8 @@ import sqlite3, sys, getopt, os
 from matplotlib import pyplot as plt
 import matplotlib.lines as mlines
 import numpy as np
+from mapping import *
 from IPython import embed as IP
-
-# Including all future techs
-tech_map = {
-    'ENGACC05':     'NGA',
-    'ENGACT05':     'NGA',    
-    'ENGAACC':      'NGA',
-    'ENGAACT':      'NGA',
-    'ENGACCR':      'NGA',
-    'ENGACTR':      'NGA',
-    'ENGASTMR':     'NGA',
-    'ENGACCCCS':    'NGA',
-    'ECOALSTM':     'COA',    
-    'ECOALIGCC':    'COA',
-    'ECOALIGCCS':   'COA',
-    'ECOALOXYCS':   'COA',
-    'ECOASTMR':     'COA',
-    'ECOALSTM_b':   'COA',    
-    'ECOALIGCC_b':  'COA',
-    'ECOALIGCCS_b': 'COA',
-    'ECOASTMR_b':   'COA',
-    'ECOALSTMCCS':  'COA',
-    'EDSLCCR':      'OIL',
-    'EDSLCTR':      'OIL',
-    'ERFLSTMR':     'OIL',
-    'EURNALWR':     'NUC',
-    'EURNALWR15':   'NUC',
-    'EBIOIGCC':     'BIO',
-    'EBIOSTMR':     'BIO',
-    'EGEOBCFS':     'GEO',
-    'EGEOR':        'GEO',
-    'ESOLPVCEN':    'SOL',
-    'ESOLSTCEN':    'SOL',
-    'ESOLTHR':      'SOL',
-    'ESOLPVR':      'SOL',
-    'ESOLPVDIS':    'SOL',
-    'EWNDR':        'WND',
-    'EWNDON':       'WND',     
-    'EWNDOFS':      'WND',
-    'EWNDOFD':      'WND',
-    'EHYDCONR':     'HYD',
-    'EHYDREVR':     'PUM', # Pumped hydro
-    'EMSWSTMR':     'BIO',
-    'ELFGICER':     'BIO',
-    'ELFGGTR':      'BIO',
-    'EHYDGS':       'GSR',
-    'EE':           'EE',
-    'EURNSMR':      'NUC',
-    }
-
-emis_map = {
-    'E_FGD_COABH_N':                'SO2 control',
-    'E_FGD_COABH_R':                'SO2 control',
-    'E_FGD_COABM_N':                'SO2 control',
-    'E_FGD_COABM_R':                'SO2 control',
-    'E_FGD_COABL_N':                'SO2 control',
-    'E_FGD_COABL_R':                'SO2 control',
-    'E_LNBSNCR_COAB_R':             'NOx control',
-    'E_LNBSNCR_COAB_N':             'NOx control',
-    'E_LNBSCR_COAB_R':              'NOx control',
-    'E_LNBSCR_COAB_N':              'NOx control',
-    'E_LNB_COAB_R':                 'NOx control',
-    'E_LNB_COAB_N':                 'NOx control',
-    'E_SCR_COAB_R':                 'NOx control',
-    'E_SCR_COAB_N':                 'NOx control',
-    'E_SNCR_COAB_R':                'NOx control',
-    'E_SNCR_COAB_N':                'NOx control',
-    'E_CCR_COAB':                   'CO2 control',
-    'E_CCR_COALIGCC_N':             'CO2 control',
-    'E_CCR_COALSTM_N':              'CO2 control',
-    'E_CCR_NGAACC_N':               'CO2 control',
-    }
-
-# http://www.rapidtables.com/web/color/RGB_Color.htm
-color_map = {
-    'NGA':         [0.7, 0.7, 0.7],
-    'COA':         [0.0, 0.0, 0.0],
-    'OIL':         [1.0, 0.0, 0.0],
-    'NUC':         [0.6, 0.0, 0.8],
-    'BIO':         [0.0, 1.0, 0.0],
-    'GEO':         [1.0, 0.5, 0.3],
-    'SOL':         [1.0, 1.0, 0.0],
-    'WND':         [0.0, 0.0, 1.0],
-    'HYD':         [0.4, 0.6, 0.9],
-    'PUM':         [0.4, 0.6, 0.9],
-    'GSR':         [1.0, 0.0, 0.0],
-    'CO2 control': 'black',
-    'NOx control': [0.5, 0.0, 0.0],
-    'SO2 control': 'green',
-    'EE':          'white',
-    'other':       [1.0, 1.0, 1.0]
-    }
-
-edge_map = {
-    'NGA':         [0.7, 0.7, 0.7],
-    'COA':         [0.0, 0.0, 0.0],
-    'OIL':         [1.0, 0.0, 0.0],
-    'NUC':         [0.6, 0.0, 0.8],
-    'BIO':         [0.0, 1.0, 0.0],
-    'GEO':         [1.0, 0.5, 0.3],
-    'SOL':         [1.0, 1.0, 0.0],
-    'WND':         [0.0, 0.0, 1.0],
-    'HYD':         [0.4, 0.6, 0.9],
-    'PUM':         [0.4, 0.6, 0.9],
-    'GSR':         [1.0, 0.0, 0.0],
-    'CO2 control': 'black',
-    'NOx control': [0.5, 0.0, 0.0],
-    'SO2 control': 'green',
-    'EE':          'black',
-    'other':       [1.0, 1.0, 1.0]
-    }
-
-hatch_map = {
-    'NGA':   None,
-    'COA':   None,
-    'OIL':   None,
-    'NUC':   None,
-    'BIO':   None,
-    'GEO':   None,
-    'SOL':   None,
-    'WND':   None,
-    'HYD':   None,
-    'PUM':   '++',
-    'GSR':   None,
-    'EE':    '//',
-    'other': '++'
-    }
 
 class TemoaNCResult():
     def __init__(self, db, scenario):
@@ -825,6 +700,8 @@ def plot_result(fname, s_chosen):
         catagories.remove('NUC')
         catagories.remove('COA')
         catagories.remove('NGA')
+        catagories.remove('BIO')
+        catagories.insert(0, 'BIO')
         catagories.insert(0, 'NGA')
         catagories.insert(0, 'COA')
         catagories.insert(0, 'NUC')
@@ -842,10 +719,10 @@ def plot_result(fname, s_chosen):
             # power output in the same slice in GW
             y = np.array(p_t[t][periods.index(p)])/3.6/(8760*np.array(SegFrac))*1000
             if t != 'EE':
-                y *= 0.97
+                y *= 0.97 # T&D efficiency
             ys.append(y)
         ys = np.array(ys) # Convert unit to GWh
-        slices = range(0, len(ys[0]))
+        slices = range(1, len(ys[0]) + 1)
         ystack = np.cumsum(ys, axis=0)
     
         area_handles = list()
@@ -854,47 +731,67 @@ def plot_result(fname, s_chosen):
         for i in range(0, len(catagories_on_fig)):
             t = catagories_on_fig[i]
             if i==0:
-                h = ax.fill_between(slices, 
-                                    0, ystack[i, ], 
-                                    facecolor=color_map[t],
-                                    # edgecolor=color_map[t],
-                                    # alpha=.7,
-                                    hatch=hatch_map[t])
-                area_handles.append(h)
-                # Plot a second time, since the color hatch line and edge have to be 
-                # the same.
-                ax.fill_between(slices, 
-                                0, ystack[i, ], 
-                                facecolor='none',
-                                edgecolor=color_map[t])
+                for j in range(0, len(slices)/24):
+                    h = ax.fill_between(slices[j*24: (1+j)*24], 
+                                        0,
+                                        ystack[i, ][j*24: (1+j)*24], 
+                                        facecolor=color_map[t],
+                                        # edgecolor=color_map[t],
+                                        # alpha=.7,
+                                        hatch=hatch_map[t])
+                    if j == 0:
+                        area_handles.append(h)
+                    # Plot a second time, since the color hatch line and edge have to be 
+                    # the same.
+                    ax.fill_between(slices[j*24: (1+j)*24], 
+                                    0,
+                                    ystack[i, ][j*24: (1+j)*24], 
+                                    facecolor='none',
+                                    edgecolor=color_map[t])
             else:
-                h = ax.fill_between(slices, 
-                                    ystack[i-1, ], ystack[i, ], 
-                                    facecolor=color_map[t],
-                                    # edgecolor=color_map[t],
-                                    # alpha=.7,
-                                    hatch=hatch_map[t])
-                area_handles.append(h)
-                ax.fill_between(slices, 
-                                ystack[i-1, ], ystack[i, ], 
-                                facecolor='none',
-                                edgecolor=color_map[t])
+                for j in range(0, len(slices)/24):
+                    h = ax.fill_between(slices[j*24: (1+j)*24], 
+                                        ystack[i-1, ][j*24: (1+j)*24],
+                                        ystack[i,   ][j*24: (1+j)*24], 
+                                        facecolor=color_map[t],
+                                        # edgecolor=color_map[t],
+                                        # alpha=.7,
+                                        hatch=hatch_map[t])
+                    if j == 0:
+                        area_handles.append(h)
+                    ax.fill_between(slices[j*24: (1+j)*24], 
+                                    ystack[i-1, ][j*24: (1+j)*24],
+                                    ystack[i,   ][j*24: (1+j)*24], 
+                                    facecolor='none',
+                                    edgecolor=color_map[t])
         demand_real = Demands[periods.index(p)]*np.array(DSD)/3.6*1000/(
                         8760*np.array(SegFrac) )
-        h = ax.plot(slices, demand_real, 'r-', label='Demand')
-        line_handles.append(h)
+        for j in range(0, len(slices)/24):
+            h = ax.plot(
+                slices[j*24: (1+j)*24], 
+                demand_real[j*24: (1+j)*24],
+                'r-',
+                label='Demand'
+            )
+            if j == 0:
+                line_handles.append(h)
         
         sigma_cap = np.array([0]*len(periods))
         for c in capacities:
             sigma_cap = sigma_cap + np.array(capacities[c])
-        h = ax.plot(slices, [sigma_cap[periods.index(p)]]*len(slices), 
-                    'k-', label='Installed cap')
+        
+        h = ax.plot(
+            slices,
+            [ sigma_cap[periods.index(p)] for k in slices ],
+            'k-',
+            label='Installed cap'
+        )
         line_handles.append(h)
     
         plt.xlim([ slices[0], slices[-1] ])
-        plt.axvline(x=23, color=[.5, 0, 0], linestyle='--')
-        plt.axvline(x=47, color=[.5, 0, 0], linestyle='--')
-        plt.axvline(x=71, color=[.5, 0, 0], linestyle='--')
+        plt.axvline(x=24.5, color=[.5, 0, 0], linestyle='--')
+        plt.axvline(x=48.5, color=[.5, 0, 0], linestyle='--')
+        plt.axvline(x=72.5, color=[.5, 0, 0], linestyle='--')
         ax.yaxis.grid(True)
         major_ticks = range(0, 95, 20)
         minor_ticks = range(0, 95, 5)
@@ -909,8 +806,8 @@ def plot_result(fname, s_chosen):
                         bbox_to_anchor = (1.01, 0.5), 
                         loc='center left')
         plt.gca().add_artist(leg1)
-        ax.legend(line_handles, loc='upper right')
-        ax.legend()
+        # ax.legend(line_handles, loc='upper right')
+        # ax.legend()
     
         plt.xlabel('Slice index #')
         plt.ylabel('Average power (GW)')

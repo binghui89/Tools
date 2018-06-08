@@ -1,3 +1,75 @@
+# Including all future techs
+tech_map = {
+    'ENGACC05':     'NGA',
+    'ENGACT05':     'NGA',    
+    'ENGAACC':      'NGA',
+    'ENGAACT':      'NGA',
+    'ENGACCR':      'NGA',
+    'ENGACTR':      'NGA',
+    'ENGASTMR':     'NGA',
+    'ENGACCCCS':    'NGA',
+    'ECOALSTM':     'COA',    
+    'ECOALIGCC':    'COA',
+    'ECOALIGCCS':   'COA',
+    'ECOALOXYCS':   'COA',
+    'ECOASTMR':     'COA',
+    'ECOALSTM_b':   'COA',    
+    'ECOALIGCC_b':  'COA',
+    'ECOALIGCCS_b': 'COA',
+    'ECOASTMR_b':   'COA',
+    'ECOALSTMCCS':  'COA',
+    'EDSLCCR':      'OIL',
+    'EDSLCTR':      'OIL',
+    'ERFLSTMR':     'OIL',
+    'EURNALWR':     'NUC',
+    'EURNALWR15':   'NUC',
+    'EBIOIGCC':     'BIO',
+    'EBIOSTMR':     'BIO',
+    'EGEOBCFS':     'GEO',
+    'EGEOR':        'GEO',
+    'ESOLPVCEN':    'SOL',
+    'ESOLSTCEN':    'SOL',
+    'ESOLTHR':      'SOL',
+    'ESOLPVR':      'SOL',
+    'ESOLPVDIS':    'SOL',
+    'EWNDR':        'WND',
+    'EWNDON':       'WND',     
+    'EWNDOFS':      'WND',
+    'EWNDOFD':      'WND',
+    'EHYDCONR':     'HYD',
+    'EHYDREVR':     'PUM', # Pumped hydro
+    'EMSWSTMR':     'BIO',
+    'ELFGICER':     'BIO',
+    'ELFGGTR':      'BIO',
+    'EHYDGS':       'GSR',
+    'EE':           'EE',
+    'EURNSMR':      'NUC',
+    }
+
+emis_map = {
+    'E_FGD_COABH_N':                'SO2 control',
+    'E_FGD_COABH_R':                'SO2 control',
+    'E_FGD_COABM_N':                'SO2 control',
+    'E_FGD_COABM_R':                'SO2 control',
+    'E_FGD_COABL_N':                'SO2 control',
+    'E_FGD_COABL_R':                'SO2 control',
+    'E_LNBSNCR_COAB_R':             'NOx control',
+    'E_LNBSNCR_COAB_N':             'NOx control',
+    'E_LNBSCR_COAB_R':              'NOx control',
+    'E_LNBSCR_COAB_N':              'NOx control',
+    'E_LNB_COAB_R':                 'NOx control',
+    'E_LNB_COAB_N':                 'NOx control',
+    'E_SCR_COAB_R':                 'NOx control',
+    'E_SCR_COAB_N':                 'NOx control',
+    'E_SNCR_COAB_R':                'NOx control',
+    'E_SNCR_COAB_N':                'NOx control',
+    'E_CCR_COAB':                   'CO2 control',
+    'E_CCR_COALIGCC_N':             'CO2 control',
+    'E_CCR_COALSTM_N':              'CO2 control',
+    'E_CCR_NGAACC_N':               'CO2 control',
+    }
+
+# http://www.rapidtables.com/web/color/RGB_Color.htm
 color_map = {
     'NGA':         [0.7, 0.7, 0.7],
     'COA':         [0.0, 0.0, 0.0],
@@ -51,6 +123,7 @@ hatch_map = {
     'EE':    '//',
     'other': '++'
     }
+
 category_map = {
     'Bioenergy':          'BIO',
     'Coal':               'COA',
@@ -65,7 +138,8 @@ category_map = {
     'Wind':               'WND',
     'Emission reduction': 'Emission reduction',
     'other':              'other',
-}
+    }
+
 color_map['Emission reduction'] = 'white'
 edge_map['Emission reduction'] = 'black'
 hatch_map['Emission reduction'] = None
