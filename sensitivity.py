@@ -461,6 +461,101 @@ def bin_search(tech, vintage, dat, eps = 0.01, all_v = False):
             cap_target)
     return (scale_u + scale_l)/2.0
 
+def cplex_search(t, v, cplex_instance, eps = 0.01, all_v=False):
+
+    def return_row(c0, scale, capacity):
+        row = {
+            'algorithm':         cplex_instance.parameters.lpmethod,
+            'scenario':          None,
+            'technology':        t,
+            'vintage':           v,
+            'coef lower bound':  'N/A',
+            'coefficient':       c0,
+            'coef upper bound':  'N/A',
+            'scale':             scale,
+            'BE IC':             None, 
+            'BE FC':             None,
+            'IC':                None,
+            'FC':                None,
+            'capacity':          capacity,
+            'BE IC (CS)':        'N/A', 
+            'BE FC (CS)':        'N/A',
+            'scale (CS)':        'N/A',
+        }
+        return row
+
+    msg = ''
+    target_year = v
+    target_tech = t
+    target_var0 = 'V_Capacity(' + target_tech + '_' + str(target_year) + ')'
+
+    t0 = time()
+    time_mark = lambda: time() - t0
+
+    c0 = cplex_instance.objective.get_linear(target_var0) # Original coefficient
+    cplex_instance.set_results_stream(None)
+
+    scale_u = 1.0
+    scale_l = 0.0
+
+    history = dict()
+    history['scale_u'] = [scale_u]
+    history['scale_l'] = [scale_l]
+
+    counter = 0
+    scale_this = scale_u # Starting scale
+
+    print 'Iteration # {} starts at {} s'.format( counter, time_mark() )
+    msg += 'Iteration # {} starts at {} s\n'.format( counter, time_mark() )
+    try:
+        cplex_instance.solve()
+    except CplexSolverError:
+        print("Exception raised during solve")
+        msg += "Exception raised during solve\n"
+        return msg, None
+    cap_target0 = cplex_instance.solution.get_values(target_var0)
+    print 'Iteration # {} solved at {} s'.format( counter, time_mark() )
+    msg += 'Iteration # {} solved at {} s\n'.format( counter, time_mark() )
+    print 'Iteration # {}, scale: {:1.2f}, capacity: {} GW'.format( 
+        counter,
+        scale_this,
+        cap_target0
+    )
+    if 1.0 - scale_this <= eps and cap_target0 > 0:
+        row = return_row(c0, scale_this, cap_target0)
+        return msg, pd.DataFrame([row])
+
+    cap_target = cap_target0
+    while (scale_u - scale_l) >= eps and counter <= 20:
+        if cap_target <= 0:
+            scale_u = scale_this
+            history['scale_u'].append(scale_u)
+        else:
+            scale_l = scale_this
+            history['scale_l'].append(scale_l)
+        counter += 1
+
+        scale_this = (scale_u + scale_l)*0.5
+        cplex_instance.objective.set_linear(target_var0, scale_this*c0)
+
+        print 'Iteration # {} starts at {} s'.format( counter, time_mark() )
+        msg += 'Iteration # {} starts at {} s'.format( counter, time_mark() )
+        try:
+            cplex_instance.solve()
+        except CplexSolverError:
+            print("Exception raised during solve")
+            msg += "Exception raised during solve\n"
+            return msg, None
+        cap_target = cplex_instance.solution.get_values(target_var0)
+        print 'Iteration # {} solved at {} s'.format( counter, time_mark() )
+        msg += 'Iteration # {} solved at {} s\n'.format( counter, time_mark() )
+        print 'Iteration # {}, scale: {:1.2f}, capacity: {} GW'.format( 
+            counter,
+            scale_this,
+            cap_target)
+    row = return_row(c0, scale_this, cap_target0)
+    return msg, pd.DataFrame([row])
+
 def sen_range_api(tech, vintage, scales, list_dat):
     # This function is adapted from CPLEX's example script lpex2.py
     # It does the same thing as sen_range, but with CPLEX API for Python
