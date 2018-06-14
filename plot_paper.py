@@ -21,10 +21,47 @@ else:
     print 'Unrecognized system! Exiting...'
     sys.exit(0)
 
-from plot_result import plot_NCdemand_all, plot_emis_all, TemoaNCResult
+from plot_result import plot_NCdemand_all, plot_emis_all, TemoaNCResult, plot_bar
 from mapping import *
 
-def plot_6bars(ax, periods, colortypes, scenarios, values):
+def plot_breakeven(ax, years, scenarios, bic, ic, i_subplot=None):
+    # bic is a dictionary, ic is a list of the raw investment costs
+    # ic = [x, x, ..., x], the length of which equals to the length of years
+    # bic[scenario] = [x, x, x... x] where the length equals to the number 
+    # of optimized periods.
+
+    handles = list()
+
+    ymax = max(ic)
+    for s in scenarios:
+        h, = ax.plot(years, bic[s], 
+            color = sen_color_map[s],
+            marker = sen_marker_map[s],
+            linestyle = sen_lstyle_map[s],
+            markersize = 2,
+            linewidth = 1,
+        )
+        handles.append(h)
+
+    h = ax.fill_between(years, 0, ic, 
+        facecolor = sen_color_map['IC']
+        )
+    handles.append(h)
+
+    ax.set_xlim( ( years[0]-2, years[-1]+2 ) )
+    ymax = int(ymax)
+    ymax = ymax - ymax%100 + 100
+    ax.set_ylim(0, ymax)
+    ax.set_xticks(years)
+    if i_subplot:
+        ax.annotate(
+            i_subplot,
+            xy=(0.1, 0.9), xycoords='axes fraction',
+            xytext=(.1, .9), textcoords='axes fraction',
+                )
+    return handles
+
+def plot_6bar_clustered(ax, periods, colortypes, scenarios, values):
     handles = list()
     w     = 0.1*5
     gap   = 0.04*5 # w + gap = 5*(1/7)
@@ -68,133 +105,142 @@ def plot_6bars(ax, periods, colortypes, scenarios, values):
 
     return handles
 
-def plot_breakeven(ax, years, scenarios, bic, ic, i_subplot=None):
-    # bic is a dictionary, ic is a list of the raw investment costs
-    # ic = [x, x, ..., x], the length of which equals to the length of years
-    # bic[scenario] = [x, x, x... x] where the length equals to the number 
-    # of optimized periods.
-    sen_color_map = {
-        'IC':    [0.9, 0.9, 0.9],
-        'L':     'black',
-        'R':     'black',
-        'H':     'black',
-        'CPP-L': 'green',
-        'CPP-R': 'green',
-        'CPP-H': 'green',
-        'cap-L': 'green',
-        'cap-R': 'green',
-        'cap-H': 'green',
-
-    }
-
-    sen_lstyle_map = {
-        'IC':    None,
-        'L':     '--',
-        'R':     '-',
-        'H':     'dotted',
-        'CPP-L': '--',
-        'CPP-R': '-',
-        'CPP-H': 'dotted',
-        'cap-L': '--',
-        'cap-R': '-',
-        'cap-H': 'dotted',
-    }
-
-    sen_marker_map = {
-        'IC':    None,
-        'L':     's',
-        'R':     's',
-        'H':     's',
-        'CPP-L': 's',
-        'CPP-R': 's',
-        'CPP-H': 's',
-        'cap-L': 's',
-        'cap-R': 's',
-        'cap-H': 's',
-    }
-
-    handles = list()
-
-    ymax = max(ic)
-    for s in scenarios:
-        h, = ax.plot(years, bic[s], 
-            color = sen_color_map[s],
-            marker = sen_marker_map[s],
-            linestyle = sen_lstyle_map[s],
-            markersize = 2,
-            linewidth = 1,
-        )
-        handles.append(h)
-
-    h = ax.fill_between(years, 0, ic, 
-        facecolor = sen_color_map['IC']
-        )
-    handles.append(h)
-
-    ax.set_xlim( ( years[0]-2, years[-1]+2 ) )
-    ymax = int(ymax)
-    ymax = ymax - ymax%100 + 100
-    ax.set_ylim(0, ymax)
-    ax.set_xticks(years)
-    if i_subplot:
-        ax.annotate(
-            i_subplot,
-            xy=(0.1, 0.9), xycoords='axes fraction',
-            xytext=(.1, .9), textcoords='axes fraction',
-                )
-    return handles
-
-def plot_marginalCO2():
-    fig = plt.figure(figsize=(5, 3), dpi=80, facecolor='w', edgecolor='k')
-    ax  = plt.subplot(111)
-    w = 1
-    gap = 2
-    years = range(2025, 2055, 5)
-    values = dict()
-    values['CPP-L']         = [0.00, 4.68, 0.00, 51.12, 53.86, 28.89]
-    values['CPP-R']         = [17.88, 33.40, 23.92, 50.79, 41.97, 27.05]
-    values['CPP-H']         = [86.17, 81.90, 57.81, 58.51, 47.70, 27.61]
-    values['SCC in 2015 $'] = [16, 18, 21, 24, 26, 30]
-
-    scenarios = ['CPP-L', 'CPP-R', 'CPP-H']
-    fcolor    = ['k', [0.8, 0.8, 0.8],  'w']
-    ecolor    = ['k', [0.8, 0.8, 0.8],  'k']
-    handles   = list()
-    for i in range(0, len(scenarios)):
-        s = scenarios[i]
-        offset = (i - 1)*w
-        h = ax.bar(
-            [j + offset for j in years],
-            values[s],
-            width=w,
-            color=fcolor[i],
-            edgecolor=ecolor[i],
-        )
-        handles.append(h)
-    h, = ax.plot(
-        years,
-        values['SCC in 2015 $'],
-        linewidth=1,
-        color='k',
-        marker='s',
-        markersize=2,
-    )
-    handles.append(h)
-    plt.legend(
-        handles,
-        scenarios+['SCC in 2015 $'],
-        loc='upper center', 
-        ncol=4, 
-        bbox_to_anchor=(0.5, 1.15),
-        edgecolor=None
-    )
-    ax.set_ylabel(r'\$/tonne $\mathregular{CO}_2$')
-    return fig
-
 # wb1 = load_workbook('Graph.EST.xlsx', data_only=True)
 # Size of each individual subplot, in inch
 hfig = 4
 wfig = 10
+
+def plot_6panel(db):
+    for figure_type in ['capacities', 'activities']:
+        fig = plt.figure(figsize=(wfig, hfig*3), dpi=80, facecolor='w', edgecolor='k')
+        gs = gridspec.GridSpec(3, 2, height_ratios=[1, 1, 1], width_ratios=[1, 1], hspace=0, wspace=0) 
+        ax = list()
+        scenario = ['L', 'capL', 'R', 'capR', 'H', 'capH'] # First left, then down
+        ymax = 0
+        for s in scenario:
+            instance = TemoaNCResult(db, s)
+            sindex = scenario.index(s)
+            nr = (sindex - (sindex%2))/2
+            nc = sindex%2
+            ax.append( plt.subplot( gs[nr, nc]) )
+            techs  = instance.techs
+            techs.remove('EE')
+            values = getattr( instance, figure_type )
+            if figure_type == 'activities':
+                for t in values:
+                    values[t] = [i/3.6 for i in values[t]]
+            handles = plot_bar(ax[sindex], instance.periods, instance.techs, values)
+            ax[sindex].text(
+                .5, .9, '('+ chr(ord('a')+sindex) +')',
+                horizontalalignment='center',
+                transform=ax[sindex].transAxes
+            )
+            ylim = ax[sindex].get_ylim()
+            if ymax < ylim[-1]:
+                ymax = ylim[-1]
+        ymax = ymax - ymax%10 + 15
+        for s in scenario:
+            sindex = scenario.index(s)
+            ax[sindex].set_ylim([0, ymax])
+        for i in range(0, 4):
+            plt.setp(ax[i].get_xticklabels(), visible=False)
+        # plt.subplots_adjust(hspace=.0)
+        for i in range(1, 6, 2):
+            plt.setp(ax[i].get_yticklabels(), visible=False)
+        # plt.subplots_adjust(wspace=.0)
+        plt.subplots_adjust(left=0.10, right=0.9, top=0.99)
+        for i in range( 4, 6 ):
+            ax[i].set_xlabel('Year')
+        for i in range(0, 5, 2):
+            if figure_type == 'capacities':
+                ax[i].set_ylabel('Capacity (GW)')
+            else:
+                ax[i].set_ylabel('Generation (TWh)')
+        techs_full = list()
+        for t in techs:    
+            t_full = [k for k, v in category_map.items() if v == t][0]
+            techs_full.append(t_full)
+        fig.legend(
+            handles, techs_full, 
+            loc='upper center', 
+            ncol=5, 
+            bbox_to_anchor=(0.5, 0.065),
+            edgecolor=None
+        )
+
+def plot_6breakeven(df_data):
+    techs       = ['EWNDON', 'EWNDOFS', 'ESOLPVDIS', 'EBIOIGCC', 'EURNALWR15', 'EURNSMR']
+    techs_range = ['EWNDON', 'EWNDOFS', 'ESOLPVDIS', 'EBIOIGCC', 'EURNALWR15', 'EURNSMR']
+
+    years = range(2015, 2055, 5)
+    scenarios_original = ['L', 'R', 'H', 'cap-L', 'cap-R', 'cap-H']
+    scenarios_range = scenarios_original + ['Ldec', 'Linc', 'cap-Hdec', 'cap-Hinc']
+
+    fig  = plt.figure(figsize=(wfig, hfig*3), dpi=80, facecolor='w', edgecolor='k')
+    gs = gridspec.GridSpec(3, 2, wspace=0.0, hspace=0.0) 
+    ax = list()
+    handles = None
+    for it in range(0, len(techs)):
+        t = techs[it]
+        nr = (it - (it%2))/2
+        nc = it%2
+        ax.append( plt.subplot(gs[nr, nc]) )
+        ic  = list()
+        bic = dict()
+        if t in techs_range:
+            scenarios = scenarios_range
+        else:
+            scenarios = scenarios_original
+        for this_s in scenarios:
+            # data_this_t = list()
+            data_tmp = df_data['BE IC'][
+                (df_data['scenario']==this_s)
+                & (df_data['technology']==t)
+            ]
+            data_tmp.reset_index(drop=True, inplace=True)
+            bic[this_s] = list( data_tmp )[0: 8]
+        ic = list( df_data['IC'][
+            (df_data['scenario']=='R')
+            & (df_data['technology']==t)
+        ])[0: 8]
+
+        handles = plot_breakeven(ax[it], years, scenarios_original, bic, ic, '('+chr(ord('a') + it)+')')
+        if t in techs_range:
+            c = ['g', 'k']
+            for s_lb, s_ub in [
+                ('Ldec', 'Linc'),
+                ('cap-Hdec', 'cap-Hinc'),
+            ]:
+                lb = bic[s_lb]
+                ub = bic[s_ub]
+                ax[it].fill_between(years, lb, ub, color=c.pop(), alpha=0.2)
+    
+    for i in range(0, len(ax)):
+        ylim = ax[i].get_ylim()
+        ymax = ylim[1] - ylim[1]%500+800
+        ax[i].set_ylim([0, ymax])
+        if i%2 == 1:
+            ax[i].yaxis.tick_right()
+        if i%2 == 0:
+            ax[i].set_ylabel('Capital cost ($/MW)')
+        if i<len(ax)-2:
+            plt.setp(ax[i].get_xticklabels(), visible=False)
+        else:
+            for tick in ax[i].get_xticklabels():
+                tick.set_rotation(90)
+
+    fig.legend(
+        handles, scenarios_original+['Capex'], 
+        loc='upper center', 
+        ncol=7, 
+        bbox_to_anchor=(0.5, 0.045),
+        edgecolor=None
+    )
+    # https://stackoverflow.com/q/18619880/4626354
+    plt.subplots_adjust(left=0.10, right=0.9, top=0.99)
+    return fig
+
+# The following are old functions for my PhD thesis paper
 
 def cap_and_act(db):
     fig = plt.figure(figsize=(wfig, hfig*2), dpi=80, facecolor='w', edgecolor='k')
@@ -234,7 +280,7 @@ def cap_and_act(db):
             if t in technology:
                 technology.remove(t)
                 technology.append(t)
-        handles = plot_6bars(ax[attributes.index(a)], periods, technology, scenarios, values)
+        handles = plot_6bar_clustered(ax[attributes.index(a)], periods, technology, scenarios, values)
 
     ax[1].set_xlabel('Periods')
     ax[1].set_ylabel('GW')
@@ -242,76 +288,6 @@ def cap_and_act(db):
     plt.setp(ax[0].get_xticklabels(), visible=False) # shared x axis
     yticks = ax[1].yaxis.get_major_ticks()
     yticks[-1].label1.set_visible(False) # remove last tick label for the second subplot
-    plt.subplots_adjust(hspace=.0) # remove vertical gap between subplots
-    # ax[1].legend(handles, technology, loc='upper left')
-    fig.legend(
-        handles, technology, 
-        loc='upper center', 
-        ncol=5, 
-        bbox_to_anchor=(0.5, 0.065),
-        edgecolor=None
-    )
-    # https://stackoverflow.com/q/18619880/4626354
-    plt.subplots_adjust(left=0.06, right=0.94, top=0.99, wspace=0, hspace=0)
-    return fig
-
-def emissions(db):
-    emissions = ['so2_ELC', 'nox_ELC', 'co2_ELC']
-    scenarios = ['L', 'R', 'H', 'capL', 'capR', 'capH']
-
-    fig = plt.figure(figsize=(wfig, hfig*3), dpi=80, facecolor='w', edgecolor='k')
-    gs = gridspec.GridSpec(3, 1, height_ratios=[1, 1, 1]) 
-    ax = list()
-    for ie in range(0, len(emissions)):
-        e = emissions[ie]
-        ax.append( plt.subplot(gs[ie]) )
-
-        values     = dict()
-        periods    = None
-        for s in scenarios:
-            instance = TemoaNCResult(db, s)
-            periods  = instance.periods
-            for t in instance.emissions1[e]:
-                t_full = [k for k, v in category_map.items() if v == t][0]
-                if t_full not in values:
-                    values[t_full] = dict()
-                values[t_full][s] = instance.emissions1[e][t]
-                if e == 'co2_ELC':
-                    values[t_full][s] = [
-                        i/1000.0 for i in instance.emissions1[e][t]
-                    ] # kilotonne to megatonne
-                else:
-                    values[t_full][s] = instance.emissions1[e][t]
-            if 'Emission reduction' not in values:
-                values['Emission reduction'] = dict()
-            if e == 'co2_ELC':
-                values['Emission reduction'][s] = [
-                    i/1000.0 for i in instance.emis_redct[e]
-                ]
-            else:
-                values['Emission reduction'][s] = instance.emis_redct[e]
-
-        technology = values.keys()
-        if 'other' in technology:
-            technology.remove('other')
-        if 'Total raw' in technology:
-            technology.remove('Total raw')
-        for t in ['Oil', 'Bioenergy', 'Natural gas', 'Coal', 'Emission reduction']:
-            if t in technology:
-                technology.remove(t)
-                technology.append(t)
-        handles = plot_6bars(ax[ie], periods, technology, scenarios, values)
-
-    ax[-1].set_xlabel('Periods')
-    ax[0].set_ylabel('Emission (kilotonnes)')
-    ax[1].set_ylabel('Emission (kilotonnes)')
-    ax[2].set_ylabel('Emission (megatonnes)')
-    plt.setp(ax[0].get_xticklabels(), visible=False) # shared x axis
-    plt.setp(ax[1].get_xticklabels(), visible=False) # shared x axis
-    yticks = ax[2].yaxis.get_major_ticks()
-    yticks[-1].label1.set_visible(False) # remove last tick label for the last subplot
-    yticks = ax[1].yaxis.get_major_ticks()
-    yticks[-1].label1.set_visible(False) # remove last tick label for the second last subplot
     plt.subplots_adjust(hspace=.0) # remove vertical gap between subplots
     # ax[1].legend(handles, technology, loc='upper left')
     fig.legend(
@@ -409,6 +385,123 @@ def break_even():
     fig = return_figure(tech)
     figs.append(fig)
     return figs
+
+def emissions(db):
+    emissions = ['so2_ELC', 'nox_ELC', 'co2_ELC']
+    scenarios = ['L', 'R', 'H', 'capL', 'capR', 'capH']
+
+    fig = plt.figure(figsize=(wfig, hfig*3), dpi=80, facecolor='w', edgecolor='k')
+    gs = gridspec.GridSpec(3, 1, height_ratios=[1, 1, 1]) 
+    ax = list()
+    for ie in range(0, len(emissions)):
+        e = emissions[ie]
+        ax.append( plt.subplot(gs[ie]) )
+
+        values     = dict()
+        periods    = None
+        for s in scenarios:
+            instance = TemoaNCResult(db, s)
+            periods  = instance.periods
+            for t in instance.emissions1[e]:
+                t_full = [k for k, v in category_map.items() if v == t][0]
+                if t_full not in values:
+                    values[t_full] = dict()
+                values[t_full][s] = instance.emissions1[e][t]
+                if e == 'co2_ELC':
+                    values[t_full][s] = [
+                        i/1000.0 for i in instance.emissions1[e][t]
+                    ] # kilotonne to megatonne
+                else:
+                    values[t_full][s] = instance.emissions1[e][t]
+            if 'Emission reduction' not in values:
+                values['Emission reduction'] = dict()
+            if e == 'co2_ELC':
+                values['Emission reduction'][s] = [
+                    i/1000.0 for i in instance.emis_redct[e]
+                ]
+            else:
+                values['Emission reduction'][s] = instance.emis_redct[e]
+
+        technology = values.keys()
+        if 'other' in technology:
+            technology.remove('other')
+        if 'Total raw' in technology:
+            technology.remove('Total raw')
+        for t in ['Oil', 'Bioenergy', 'Natural gas', 'Coal', 'Emission reduction']:
+            if t in technology:
+                technology.remove(t)
+                technology.append(t)
+        handles = plot_6bar_clustered(ax[ie], periods, technology, scenarios, values)
+
+    ax[-1].set_xlabel('Periods')
+    ax[0].set_ylabel('Emission (kilotonnes)')
+    ax[1].set_ylabel('Emission (kilotonnes)')
+    ax[2].set_ylabel('Emission (megatonnes)')
+    plt.setp(ax[0].get_xticklabels(), visible=False) # shared x axis
+    plt.setp(ax[1].get_xticklabels(), visible=False) # shared x axis
+    yticks = ax[2].yaxis.get_major_ticks()
+    yticks[-1].label1.set_visible(False) # remove last tick label for the last subplot
+    yticks = ax[1].yaxis.get_major_ticks()
+    yticks[-1].label1.set_visible(False) # remove last tick label for the second last subplot
+    plt.subplots_adjust(hspace=.0) # remove vertical gap between subplots
+    # ax[1].legend(handles, technology, loc='upper left')
+    fig.legend(
+        handles, technology, 
+        loc='upper center', 
+        ncol=5, 
+        bbox_to_anchor=(0.5, 0.065),
+        edgecolor=None
+    )
+    # https://stackoverflow.com/q/18619880/4626354
+    plt.subplots_adjust(left=0.06, right=0.94, top=0.99, wspace=0, hspace=0)
+    return fig
+
+def plot_marginalCO2():
+    fig = plt.figure(figsize=(5, 3), dpi=80, facecolor='w', edgecolor='k')
+    ax  = plt.subplot(111)
+    w = 1
+    gap = 2
+    years = range(2025, 2055, 5)
+    values = dict()
+    values['CPP-L']         = [0.00, 4.68, 0.00, 51.12, 53.86, 28.89]
+    values['CPP-R']         = [17.88, 33.40, 23.92, 50.79, 41.97, 27.05]
+    values['CPP-H']         = [86.17, 81.90, 57.81, 58.51, 47.70, 27.61]
+    values['SCC in 2015 $'] = [16, 18, 21, 24, 26, 30]
+
+    scenarios = ['CPP-L', 'CPP-R', 'CPP-H']
+    fcolor    = ['k', [0.8, 0.8, 0.8],  'w']
+    ecolor    = ['k', [0.8, 0.8, 0.8],  'k']
+    handles   = list()
+    for i in range(0, len(scenarios)):
+        s = scenarios[i]
+        offset = (i - 1)*w
+        h = ax.bar(
+            [j + offset for j in years],
+            values[s],
+            width=w,
+            color=fcolor[i],
+            edgecolor=ecolor[i],
+        )
+        handles.append(h)
+    h, = ax.plot(
+        years,
+        values['SCC in 2015 $'],
+        linewidth=1,
+        color='k',
+        marker='s',
+        markersize=2,
+    )
+    handles.append(h)
+    plt.legend(
+        handles,
+        scenarios+['SCC in 2015 $'],
+        loc='upper center', 
+        ncol=4, 
+        bbox_to_anchor=(0.5, 1.15),
+        edgecolor=None
+    )
+    ax.set_ylabel(r'\$/tonne $\mathregular{CO}_2$')
+    return fig
 
 def CF_solar_wind_load():
     tech = ['Onshore wind', 'Offshore wind', 'Solar PV, rooftop', 'Solar PV, utility']

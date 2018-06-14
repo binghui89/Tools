@@ -143,3 +143,43 @@ category_map = {
 color_map['Emission reduction'] = 'white'
 edge_map['Emission reduction'] = 'black'
 hatch_map['Emission reduction'] = None
+
+# Break-even cost graphs
+sen_color_map = {
+    'IC':    [0.9, 0.9, 0.9],
+    'L':     'black',
+    'R':     'black',
+    'H':     'black',
+    'CPP-L': 'green',
+    'CPP-R': 'green',
+    'CPP-H': 'green',
+    'cap-L': 'green',
+    'cap-R': 'green',
+    'cap-H': 'green',
+}
+
+sen_lstyle_map = {
+    'IC':    None,
+    'L':     '--',
+    'R':     '-',
+    'H':     'dotted',
+    'CPP-L': '--',
+    'CPP-R': '-',
+    'CPP-H': 'dotted',
+    'cap-L': '--',
+    'cap-R': '-',
+    'cap-H': 'dotted',
+}
+
+sen_marker_map = {
+    'IC':    None,
+    'L':     's',
+    'R':     's',
+    'H':     's',
+    'CPP-L': 's',
+    'CPP-R': 's',
+    'CPP-H': 's',
+    'cap-L': 's',
+    'cap-R': 's',
+    'cap-H': 's',
+}

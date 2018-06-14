@@ -4,6 +4,7 @@ from matplotlib import pyplot as plt
 import matplotlib.lines as mlines
 import numpy as np
 from mapping import *
+from copy import deepcopy
 from IPython import embed as IP
 
 class TemoaNCResult():
@@ -171,6 +172,31 @@ class TemoaNCResult():
                 catagory = 'other'
 
             self.emissions1[e][catagory][self.periods.index(p)] += value
+
+def plot_bar(ax, periods, colortypes, values):
+    width = 2
+    handles = list()
+    b = [0]*len(periods)
+    for t in colortypes:
+        if hatch_map[t]:
+            h = ax.bar(periods, 
+                        values[t], 
+                        width, 
+                        bottom = b,
+                        color = color_map[t], 
+                        hatch = hatch_map[t]
+                        )
+        else:
+            h = ax.bar(periods, 
+                        values[t], 
+                        width, 
+                        bottom = b,
+                        color = color_map[t], 
+                        edgecolor = edge_map[t]
+                        )
+        handles.append(h)
+        b = [b[i] + values[t][i] for i in range(0, len(b))]
+    return handles
 
 def plot_stochastic_var(options):
     techs       = options.techs
@@ -461,7 +487,6 @@ def plot_evpi(options = None):
     plt.show()
 
 def plot_result(fname, s_chosen):
-
     instance = TemoaNCResult(fname, s_chosen)
     Demands    = instance.Demands
     DSD        = instance.DSD
@@ -498,45 +523,36 @@ def plot_result(fname, s_chosen):
 
     width = 2
     findex = 0
-    # Start plotting cpacities: electricity generating capacity and 
-    # emission control technologies
-    plt.figure(findex)
-    findex += 1
-    handles = list()
-    b = [0]*len(periods)
-    #ax = plt.subplot(121)
-    ax = plt.subplot(111)
-    for tech in techs:
-        if hatch_map[tech]:
-            h = ax.bar(periods, 
-                        capacities[tech], 
-                        width, 
-                        bottom = b,
-                        color = color_map[tech], 
-                        hatch = hatch_map[tech]
-                        )
+    # Electricity generating capacity and generations
+    for what in ['capacities', 'activities']:
+        plt.figure(findex)
+        handles = list()
+        b = [0]*len(periods)
+        #ax = plt.subplot(121)
+        ax = plt.subplot(111)
+        values = getattr(instance, what)
+        if what is 'activities':
+            tmp_values = deepcopy(values)
+            for t in values:
+                values[t] = [i/3.6 for i in tmp_values[t]]
+        handles = plot_bar(ax, periods, techs, values)
+        box = ax.get_position()
+        ax.set_position([box.x0, box.y0, box.width*0.9, box.height])
+        ax.legend([h[0] for h in handles], 
+                    techs, 
+                    bbox_to_anchor = (1.01, 0.5), 
+                    loc='center left')
+        ax.yaxis.grid(True, linestyle='--')
+        if what is 'capacities':
+            ax.set_ylabel('Capacity (GW)')
+            ax.set_title('Electricity Generating Capacity')
         else:
-            h = ax.bar(periods, 
-                        capacities[tech], 
-                        width, 
-                        bottom = b,
-                        color = color_map[tech], 
-                        edgecolor = edge_map[tech]
-                        )
-        handles.append(h)
-        b = [b[i] + capacities[tech][i] for i in range(0, len(b))]
-    plt.ylabel('Capacity (GW)')
-    plt.xticks([i + width*0.5 for i in periods], [str(i) for i in periods])
-    plt.title('Electricity Generating Capacity')
-    box = ax.get_position()
-    ax.set_position([box.x0, box.y0, box.width*0.9, box.height])
-    ax.legend([h[0] for h in handles], 
-                techs, 
-                bbox_to_anchor = (1.01, 0.5), 
-                loc='center left')
-    ax.yaxis.grid(True)
+            ax.set_ylabel('Activities (TWh)')
+            ax.set_title('Electricity Generation')
+        findex += 1
 
-    #ax = plt.subplot(122)
+    ############################################################################
+    # Capacities of techs defined as emission control, may use clustered bar template
     plt.figure(findex)
     findex += 1
     ax = plt.subplot(111)
@@ -565,45 +581,8 @@ def plot_result(fname, s_chosen):
                 )
     ax.yaxis.grid(True)
 
-    # Second figure: activites, inclulding electricity generating and emission 
-    # control.
-    plt.figure(findex)
-    findex += 1
-    handles = list()
-    b = [0]*len(periods)
-    #ax = plt.subplot(121)
-    ax = plt.subplot(111)
-    for tech in techs:
-        if hatch_map[tech]:
-            h = ax.bar(periods, 
-                        [i/3.6 for i in activities[tech]],  # PJ -> TWh
-                        width, 
-                        bottom = b,
-                        color = color_map[tech], 
-                        hatch = hatch_map[tech]
-                        )
-        else:
-            h = ax.bar(periods, 
-                        [i/3.6 for i in activities[tech]],  # PJ -> TWh
-                        width, 
-                        bottom = b,
-                        color = color_map[tech], 
-                        edgecolor = edge_map[tech]
-                        )
-        handles.append(h)
-        b = [b[i] + activities[tech][i]/3.6 for i in range(0, len(b))]
-    plt.ylabel('Generation (TWh)')
-    plt.xticks([i + width*0.5 for i in periods], [str(i) for i in periods])
-    plt.title('Electricity Generation')
-    box = ax.get_position()
-    ax.set_position([box.x0, box.y0, box.width*0.9, box.height])
-    ax.legend([h[0] for h in handles], techs, 
-                bbox_to_anchor = (1.01, 0.5), 
-                loc='center left'
-                )
-    ax.yaxis.grid(True)
-
-    #ax = plt.subplot(122)
+    ############################################################################
+    # Activities of techs defined as emission control, may use clustered bar template
     plt.figure(findex)
     findex += 1
     ax = plt.subplot(111)
@@ -632,7 +611,8 @@ def plot_result(fname, s_chosen):
                 )
     ax.yaxis.grid(True)
 
-    # Figure 3: emission activities
+    ############################################################################
+    # Emission activities
     plt.figure(findex)
     findex += 1
     i = 1
@@ -692,6 +672,8 @@ def plot_result(fname, s_chosen):
     # this_figure.legend([h[0] for h in handles], 
     #                     ['Emissions', 'Emission Reductios'], 'lower right')
 
+    ############################################################################
+    # Load time sequence and electricity generation by sources
     for p in periods:
         plt.figure(findex)
         findex += 1
@@ -797,6 +779,13 @@ def plot_result(fname, s_chosen):
         minor_ticks = range(0, 95, 5)
         ax.set_xticks(major_ticks)
         ax.set_xticks(minor_ticks, minor=True)
+        sigma_cap[periods.index(p)]
+        y_ub = (
+            int(sigma_cap[periods.index(p)])
+            - int(sigma_cap[periods.index(p)])%5
+            + 10
+        )
+        ax.set_ylim([0,  y_ub])
         ax.xaxis.grid(which='minor', alpha=0.8) 
     
         box = ax.get_position()
