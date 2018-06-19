@@ -198,6 +198,116 @@ def plot_bar(ax, periods, colortypes, values):
         b = [b[i] + values[t][i] for i in range(0, len(b))]
     return handles
 
+def plot_load_ts(ax, instance, this_period):
+    p       = this_period
+    p_t     = instance.p_t
+    Demands = instance.Demands
+    periods = instance.periods
+    SegFrac = instance.SegFrac
+    DSD     = instance.DSD
+    capacities = instance.capacities
+
+    ys = list()
+    catagories = list( set(tech_map.values()) )
+    catagories.remove('NUC')
+    catagories.remove('COA')
+    catagories.remove('NGA')
+    catagories.remove('BIO')
+    catagories.insert(0, 'BIO')
+    catagories.insert(0, 'NGA')
+    catagories.insert(0, 'COA')
+    catagories.insert(0, 'NUC')
+    catagories.remove('EE')
+    catagories.append('EE')
+
+    # Remove those technologies with output = 0
+    catagories_on_fig = list()
+    for t in catagories:
+        if abs( sum(p_t[t][periods.index(p)]) ) > 1E-3:
+            catagories_on_fig.append(t)
+
+    for t in catagories_on_fig:
+        # Convert electricity production in each slice in PJ to the average
+        # power output in the same slice in GW
+        y = np.array(p_t[t][periods.index(p)])/3.6/(8760*np.array(SegFrac))*1000
+        if t != 'EE':
+            y *= 0.97 # T&D efficiency
+        ys.append(y)
+    ys = np.array(ys) # Convert unit to GWh
+    slices = range(1, len(ys[0]) + 1)
+    ystack = np.cumsum(ys, axis=0)
+
+    area_handles = list()
+    for i in range(0, len(catagories_on_fig)):
+        t = catagories_on_fig[i]
+        if i==0:
+            for j in range(0, len(slices)/24):
+                h = ax.fill_between(slices[j*24: (1+j)*24], 
+                                    0,
+                                    ystack[i, ][j*24: (1+j)*24], 
+                                    facecolor=color_map[t],
+                                    # edgecolor=color_map[t],
+                                    # alpha=.7,
+                                    hatch=hatch_map[t])
+                if j == 0:
+                    area_handles.append(h)
+                # Plot a second time, since the color hatch line and edge have to be 
+                # the same.
+                ax.fill_between(slices[j*24: (1+j)*24], 
+                                0,
+                                ystack[i, ][j*24: (1+j)*24], 
+                                facecolor='none',
+                                edgecolor=color_map[t])
+        else:
+            for j in range(0, len(slices)/24):
+                h = ax.fill_between(slices[j*24: (1+j)*24], 
+                                    ystack[i-1, ][j*24: (1+j)*24],
+                                    ystack[i,   ][j*24: (1+j)*24], 
+                                    facecolor=color_map[t],
+                                    # edgecolor=color_map[t],
+                                    # alpha=.7,
+                                    hatch=hatch_map[t])
+                if j == 0:
+                    area_handles.append(h)
+                ax.fill_between(slices[j*24: (1+j)*24], 
+                                ystack[i-1, ][j*24: (1+j)*24],
+                                ystack[i,   ][j*24: (1+j)*24], 
+                                facecolor='none',
+                                edgecolor=color_map[t])
+    demand_real = Demands[periods.index(p)]*np.array(DSD)/3.6*1000/(
+                    8760*np.array(SegFrac) )
+    for j in range(0, len(slices)/24):
+        ax.plot(
+            slices[j*24: (1+j)*24], 
+            demand_real[j*24: (1+j)*24],
+            color='r',
+            linestyle='-',
+            label='Demand',
+        )
+        h = mlines.Line2D([], [], color='r', linestyle = '-')
+        if j == 0:
+            area_handles.append(h)
+    
+    sigma_cap = np.array([0]*len(periods))
+    for c in capacities:
+        sigma_cap = sigma_cap + np.array(capacities[c])
+
+    ax.set_xlim([ slices[0], slices[-1] ])
+    major_ticks = range(0, 95, 20)
+    minor_ticks = range(0, 95, 5)
+    ax.text(
+            0.3, 0.8,
+            'Total capacity : {:.1f} GW'.format(sigma_cap[periods.index(p)]),
+            transform=ax.transAxes,
+        )
+    area_names = catagories_on_fig
+    techs_full = list()
+    for t in area_names:    
+        t_full = [k for k, v in category_map.items() if v == t][0]
+        techs_full.append(t_full)
+    techs_full.append('Demand')
+    return area_handles, techs_full
+
 def plot_stochastic_var(options):
     techs       = options.techs
     directory   = options.directory
@@ -955,7 +1065,8 @@ def plot_emis_all(*arg):
     LIM_CO2  = np.array(
         [
         [0, 0, 51843, 46508, 46508, 46508, 46508, 46508],
-        [0, 0, 47114, 40404, 33694, 26984, 20274, 13564],
+        # [0, 0, 47114, 40404, 33694, 26984, 20274, 13564],
+        [63748, 57676, 51605, 45534, 39463, 33392, 27320, 21249],
         ]
     ) # kt
 
@@ -1196,8 +1307,12 @@ def plot_emis_all(*arg):
     # ax.xaxis.grid(True)
     # box = ax.get_position()
     # ax.set_position([box.x0, box.y0, box.width*0.9, box.height])
+    legend_names = ['Coal', 'Natural gas', 'Other', 'Bioenergy', 'Oil', 'CPP', 'Duke Energy cap']
+    i = legend_names.index('Bioenergy')
+    handles.pop(i)
+    legend_names.pop(i)
     ax.legend(handles, 
-                ['Coal', 'Natural gas', 'Other', 'Bioenergy', 'Oil', 'CPP', 'CP'], 
+                legend_names, 
                 # bbox_to_anchor = (1.01, 0.5), 
                 loc='upper right')
     ax.annotate('2015', xy=(2015, 80000), xytext=(2014, 75000), 

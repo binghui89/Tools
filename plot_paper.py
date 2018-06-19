@@ -2,6 +2,7 @@
 
 from openpyxl import Workbook, load_workbook
 from matplotlib import ticker, gridspec, pyplot as plt
+import matplotlib.lines as mlines
 import sys, platform
 from IPython import embed as IP
 import pandas as pd
@@ -21,7 +22,7 @@ else:
     print 'Unrecognized system! Exiting...'
     sys.exit(0)
 
-from plot_result import plot_NCdemand_all, plot_emis_all, TemoaNCResult, plot_bar
+from plot_result import plot_NCdemand_all, plot_emis_all, TemoaNCResult, plot_bar, plot_load_ts
 from mapping import *
 
 def plot_breakeven(ax, years, scenarios, bic, ic, i_subplot=None):
@@ -168,9 +169,70 @@ def plot_6panel(db):
             edgecolor=None
         )
 
+def plot_2panel(db):
+    for figure_type in ['capacities', 'activities']:
+        fig = plt.figure(figsize=(wfig, hfig+1), dpi=80, facecolor='w', edgecolor='k')
+        gs = gridspec.GridSpec(1, 2, height_ratios=[1], width_ratios=[1, 1], hspace=0, wspace=0) 
+        ax = list()
+        scenario = ['newRPS', 'newRPS_ITC_EWNDON'] # First left, then down
+        ymax = 0
+        for s in scenario:
+            instance = TemoaNCResult(db, s)
+            sindex = scenario.index(s)
+            nr = (sindex - (sindex%2))/2
+            nc = sindex%2
+            ax.append( plt.subplot( gs[nr, nc]) )
+            techs  = instance.techs
+            techs.remove('EE')
+            values = getattr( instance, figure_type )
+            if figure_type == 'activities':
+                for t in values:
+                    values[t] = [i/3.6 for i in values[t]]
+            handles = plot_bar(ax[sindex], instance.periods, instance.techs, values)
+            ax[sindex].text(
+                .5, .9, '('+ chr(ord('a')+sindex) +')',
+                horizontalalignment='center',
+                transform=ax[sindex].transAxes
+            )
+            box = ax[sindex].get_position()
+            ax[sindex].set_position([box.x0, box.y0 + box.height * 0.15,
+                 box.width, box.height * 0.95])
+            ylim = ax[sindex].get_ylim()
+            if ymax < ylim[-1]:
+                ymax = ylim[-1]
+        ymax = ymax - ymax%10 + 15
+        for s in scenario:
+            sindex = scenario.index(s)
+            ax[sindex].set_ylim([0, ymax])
+        # for i in range(0, 2):
+        #     plt.setp(ax[i].get_xticklabels(), visible=False)
+        # plt.subplots_adjust(hspace=.0)
+        for i in range(1, 2, 2):
+            plt.setp(ax[i].get_yticklabels(), visible=False)
+        # plt.subplots_adjust(wspace=.0)
+        # plt.subplots_adjust(left=0.10, right=0.9, top=0.99)
+        for i in range( 0, 2 ):
+            ax[i].set_xlabel('Year')
+        for i in range(0, 2, 2):
+            if figure_type == 'capacities':
+                ax[i].set_ylabel('Capacity (GW)')
+            else:
+                ax[i].set_ylabel('Generation (TWh)')
+        techs_full = list()
+        for t in techs:    
+            t_full = [k for k, v in category_map.items() if v == t][0]
+            techs_full.append(t_full)
+        fig.legend(
+            handles, techs_full, 
+            loc='upper center', 
+            ncol=5, 
+            bbox_to_anchor=(0.5, 0.15),
+            edgecolor=None
+        )
+
 def plot_6breakeven(df_data):
-    techs       = ['EWNDON', 'EWNDOFS', 'ESOLPVDIS', 'EBIOIGCC', 'EURNALWR15', 'EURNSMR']
-    techs_range = ['EWNDON', 'EWNDOFS', 'ESOLPVDIS', 'EBIOIGCC', 'EURNALWR15', 'EURNSMR']
+    techs       = ['EWNDON', 'EWNDOFS', 'EURNALWR15', 'EURNSMR', 'ESOLPVDIS', 'EBIOIGCC', ]
+    techs_range = ['EWNDON', 'EWNDOFS', 'EURNALWR15', 'EURNSMR', 'ESOLPVDIS', 'EBIOIGCC', ]
 
     years = range(2015, 2055, 5)
     scenarios_original = ['L', 'R', 'H', 'cap-L', 'cap-R', 'cap-H']
@@ -219,6 +281,7 @@ def plot_6breakeven(df_data):
         ylim = ax[i].get_ylim()
         ymax = ylim[1] - ylim[1]%500+800
         ax[i].set_ylim([0, ymax])
+        ax[i].tick_params(axis="x", direction='in')
         if i%2 == 1:
             ax[i].yaxis.tick_right()
         if i%2 == 0:
@@ -227,18 +290,197 @@ def plot_6breakeven(df_data):
             plt.setp(ax[i].get_xticklabels(), visible=False)
         else:
             for tick in ax[i].get_xticklabels():
-                tick.set_rotation(90)
+                # tick.set_rotation(90)
+                pass
 
     fig.legend(
         handles, scenarios_original+['Capex'], 
         loc='upper center', 
         ncol=7, 
-        bbox_to_anchor=(0.5, 0.045),
+        bbox_to_anchor=(0.5, 0.08),
         edgecolor=None
     )
     # https://stackoverflow.com/q/18619880/4626354
     plt.subplots_adjust(left=0.10, right=0.9, top=0.99)
     return fig
+
+def plot_abatement(db):
+    SCC = {
+        r'SC-$\mathregular{CO}_2$ 2.5%': [64, 71, 78, 84, 90, 97, 102, 109, ],
+        r'SC-$\mathregular{CO}_2$ 3%':   [41, 48, 53, 58, 63, 69, 74,  79, ],
+        r'SC-$\mathregular{CO}_2$ 5%':   [13, 14, 16, 18, 21, 24, 26,  30, ],
+    }
+    lstyle = {
+        r'SC-$\mathregular{CO}_2$ 2.5%': '-.',
+        r'SC-$\mathregular{CO}_2$ 3%':   '-',
+        r'SC-$\mathregular{CO}_2$ 5%':   '--',
+    }
+    periods     = None
+    cap_on      = ['capL', 'capR', 'capH', 'newRPS', 'newRPS_ITC_EWNDON']
+    cap_off     = ['L',    'R',    'H',    'R',      'R']
+    xlabelnames = cap_on
+    cost        = dict()
+    co2_emis    = dict()
+    ymax        = 0
+    for s in cap_off+cap_on:
+        instance = TemoaNCResult(db, s)
+        periods  = instance.periods
+        cost[s]  = instance.TotalCost
+        co2_emis[s] = sum(i for i in instance.emissions['co2_ELC'])
+    
+    delta_cost = list()
+    delta_emis = list()
+    abatement  = list()
+    ITC_credit = [0, 0, 0, 0, 73]
+    # At present it is hardwired, but in the future we should let the script 
+    # to calculate it
+    for i in range(0, len(cap_on)):
+        s_on, s_off = cap_on[i], cap_off[i]
+        delta_cost.append(cost[s_on] - cost[s_off])
+        delta_emis.append(co2_emis[s_off] - co2_emis[s_on])
+        abatement.append(delta_cost[i]/delta_emis[i]*1000)
+
+    fig  = plt.figure(figsize=(wfig, hfig), dpi=80, facecolor='w', edgecolor='k')
+    gs   = gridspec.GridSpec(1, 2, height_ratios=[1], width_ratios=[1, 1], hspace=0, wspace=0)
+    axes = list()
+    handles = list()
+    legends = list()
+
+    # CO2 abatement cost
+    ax = plt.subplot(gs[0])
+    axes.append(ax)
+    h = ax.bar(
+        xlabelnames,
+        abatement,
+        facecolor = 'white',
+        edgecolor = 'black',
+    )
+    legends.append('abatement cost')
+    handles.append(h)
+    h = ax.bar(
+        xlabelnames,
+        ITC_credit,
+        bottom=abatement,
+        facecolor = 'black',
+        edgecolor = 'black',
+    )
+    box = ax.get_position()
+    ax.set_position([box.x0, box.y0 + box.height * 0.15,
+            box.width, box.height * 0.95])
+    handles.append(h)
+    legends.append('ITC')
+    ylim = ax.get_ylim()
+    if ymax < ylim[-1]:
+        ymax = ylim[-1]
+    ax.tick_params(axis='x', length=0)
+    tmp_ylabel = r'$\mathregular{CO}_2$ abatement cost (' + '\$/tonne ' + r'$\mathregular{CO}_2$)'
+    ax.set_ylabel(tmp_ylabel)
+    barnames = ['cap-L', 'cap-R', 'cap-H', 'newREPS', 'newREPS + ITC']
+    ax.text(
+            0.09, 0.5, 'cap-L', transform=ax.transAxes,
+        )
+    ax.text(
+            0.27, 0.45, 'cap-R', transform=ax.transAxes,
+        )
+    ax.text(
+            0.45, 0.35, 'cap-H', transform=ax.transAxes,
+        )
+    ax.text(
+            0.61, 0.30, 'newREPS', transform=ax.transAxes,
+        )
+    ax.text(
+            0.81, 0.8, 'newREPS\n+ITC', transform=ax.transAxes,
+        )
+
+    # SCC CO2 cost
+    ax = plt.subplot(gs[1])
+    axes.append(ax)
+    # handles = list()
+    # legends = list()
+    for rate in SCC:
+        h = ax.plot(
+            periods,
+            SCC[rate],
+            color='k',
+            marker='s',
+            linestyle=lstyle[rate],
+        )
+        h = mlines.Line2D([], [], color='k', marker='s', linestyle = lstyle[rate])
+        handles.append(h)
+        legends.append(rate)
+        box = ax.get_position()
+        ax.set_position([box.x0, box.y0 + box.height * 0.15,
+                box.width, box.height * 0.95])
+    ylim = ax.get_ylim()
+    if ymax < ylim[-1]:
+        ymax = ylim[-1]
+    ax.yaxis.tick_right()
+    tmp_ylabel = r'Social cost of $\mathregular{CO}_2$ (' + '\$/tonne ' + r'$\mathregular{CO}_2$)'
+    ax.set_ylabel(tmp_ylabel)
+    ax.yaxis.set_label_position("right")
+
+    for ax in axes:
+        ax.set_ylim([0, ymax])
+        ax.text(
+                    .5, .9, '('+ chr(ord('b')+axes.index(ax)) +')',
+                    horizontalalignment='center',
+                    transform=ax.transAxes
+                )
+    plt.subplots_adjust(left=0.10, right=0.9, top=0.99)
+    plt.setp(axes[0].get_xticklabels(), visible=False)
+    fig.legend(
+        handles, legends, 
+        loc='upper center', 
+        ncol=5, 
+        bbox_to_anchor=(0.5, 0.07),
+        edgecolor=None
+    )
+
+def plot_6load_ts(db):
+    for this_p in range(2015, 2055, 5):
+        fig = plt.figure(figsize=(wfig, hfig*3), dpi=80, facecolor='w', edgecolor='k')
+        gs = gridspec.GridSpec(3, 2, height_ratios=[1, 1, 1], width_ratios=[1, 1], hspace=0.05, wspace=0.05) 
+        ax = list()
+        scenario = ['L', 'capL', 'R', 'capR', 'H', 'capH'] # First left, then down
+        ymax = 0
+        for s in scenario:
+            instance = TemoaNCResult(db, s)
+            sindex = scenario.index(s)
+            nr = (sindex - (sindex%2))/2
+            nc = sindex%2
+            ax.append( plt.subplot( gs[nr, nc]) )
+            area_handles, area_names = plot_load_ts(ax[sindex], instance, this_p)
+            ax[sindex].text(
+                .5, .9, '('+ chr(ord('a')+sindex) +')',
+                horizontalalignment='center',
+                transform=ax[sindex].transAxes
+            )
+            ylim = ax[sindex].get_ylim()
+            if ymax < ylim[-1]:
+                ymax = ylim[-1]
+        ymax = ymax - ymax%10 + 15
+        for s in scenario:
+            sindex = scenario.index(s)
+            ax[sindex].set_ylim([0, ymax])
+        for i in range(0, 4):
+            plt.setp(ax[i].get_xticklabels(), visible=False)
+        # plt.subplots_adjust(hspace=.0)
+        for i in range(1, 6, 2):
+            plt.setp(ax[i].get_yticklabels(), visible=False)
+        # plt.subplots_adjust(wspace=.0)
+        plt.subplots_adjust(left=0.10, right=0.9, top=0.99)
+        for i in range( 4, 6 ):
+            ax[i].set_xlabel('Time slice')
+        for i in range(0, 5, 2):
+            ax[i].set_ylabel('Load (GW)')
+
+        fig.legend(
+            area_handles, area_names, 
+            loc='upper center', 
+            ncol=6, 
+            bbox_to_anchor=(0.5, 0.065),
+            edgecolor=None
+        )
 
 # The following are old functions for my PhD thesis paper
 
