@@ -177,6 +177,23 @@ def plot_bar(ax, periods, colortypes, values):
     width = 2
     handles = list()
     b = [0]*len(periods)
+    # Baseload on the base, peakload on the peak
+    if 'BIO' in colortypes:
+        colortypes.remove('BIO')
+        colortypes.insert(0, 'BIO')
+    if 'OIL' in colortypes:
+        colortypes.remove('OIL')
+        colortypes.insert(0, 'OIL')
+    if 'NGA' in colortypes:
+        colortypes.remove('NGA')
+        colortypes.insert(0, 'NGA')
+    if 'COA' in colortypes:
+        colortypes.remove('COA')
+        colortypes.insert(0, 'COA')
+    if 'NUC' in colortypes:
+        colortypes.remove('NUC')
+        colortypes.insert(0, 'NUC')
+
     for t in colortypes:
         if hatch_map[t]:
             h = ax.bar(periods, 
@@ -184,7 +201,8 @@ def plot_bar(ax, periods, colortypes, values):
                         width, 
                         bottom = b,
                         color = color_map[t], 
-                        hatch = hatch_map[t]
+                        hatch = hatch_map[t],
+                        linewidth = 0.5,
                         )
         else:
             h = ax.bar(periods, 
@@ -192,13 +210,15 @@ def plot_bar(ax, periods, colortypes, values):
                         width, 
                         bottom = b,
                         color = color_map[t], 
-                        edgecolor = edge_map[t]
+                        edgecolor = edge_map[t],
+                        linewidth = 0.5,
                         )
         handles.append(h)
         b = [b[i] + values[t][i] for i in range(0, len(b))]
     return handles
 
-def plot_load_ts(ax, instance, this_period):
+def plot_load_ts(ax, instance, this_period, indextext=None, remove_spike=False):
+    # Load time series
     p       = this_period
     p_t     = instance.p_t
     Demands = instance.Demands
@@ -238,6 +258,19 @@ def plot_load_ts(ax, instance, this_period):
     ystack = np.cumsum(ys, axis=0)
 
     area_handles = list()
+    catagories_on_fig.remove('EE')
+
+    demand_real = Demands[periods.index(p)]*np.array(DSD)/3.6*1000/(
+                        8760*np.array(SegFrac) )
+    demand_real = (
+            demand_real
+            - np.array(p_t['EE'][periods.index(p)])/3.6/(8760*np.array(SegFrac))*1000
+        )
+    # Remove the spikes
+    if remove_spike:
+        ystack[len(catagories_on_fig)-1, ] = demand_real
+    # End of remove the spikes
+
     for i in range(0, len(catagories_on_fig)):
         t = catagories_on_fig[i]
         if i==0:
@@ -274,17 +307,17 @@ def plot_load_ts(ax, instance, this_period):
                                 ystack[i,   ][j*24: (1+j)*24], 
                                 facecolor='none',
                                 edgecolor=color_map[t])
-    demand_real = Demands[periods.index(p)]*np.array(DSD)/3.6*1000/(
-                    8760*np.array(SegFrac) )
     for j in range(0, len(slices)/24):
         ax.plot(
             slices[j*24: (1+j)*24], 
             demand_real[j*24: (1+j)*24],
-            color='r',
+            color=[6.0/255, 255.0/255, 6.0/255],
             linestyle='-',
             label='Demand',
+            linewidth=1,
         )
-        h = mlines.Line2D([], [], color='r', linestyle = '-')
+        # Dummy line for legend
+        h = mlines.Line2D([], [], color=[6.0/255, 255.0/255, 6.0/255], linestyle = '-')
         if j == 0:
             area_handles.append(h)
     
@@ -295,11 +328,18 @@ def plot_load_ts(ax, instance, this_period):
     ax.set_xlim([ slices[0], slices[-1] ])
     major_ticks = range(0, 95, 20)
     minor_ticks = range(0, 95, 5)
-    ax.text(
-            0.3, 0.8,
-            'Total capacity : {:.1f} GW'.format(sigma_cap[periods.index(p)]),
-            transform=ax.transAxes,
-        )
+    if indextext:
+        indextext = ' '.join([
+            indextext.center(25),
+            '\nTotal capacity : {:.1f} GW'.format(sigma_cap[periods.index(p)]),
+        ])
+        ax.text(
+                0.5, 0.85,
+                indextext,
+                transform=ax.transAxes,
+                fontsize=12,
+                horizontalalignment='center',
+            )
     area_names = catagories_on_fig
     techs_full = list()
     for t in area_names:    
@@ -934,14 +974,15 @@ def plot_NCdemand_all():
     ACT_wood  = [2045348, 2026770, 2199893, 2262087, 1952891, 1876492, 1757350, 1799930, 1585374, 1736565, 1708706, 1620636, 1861663, 1682804, 1642330, 1664192, 1544851, 1533822, 1578818, 1532342, 1646120, 1716892, 1669998, 1677076, 1296373, 1438215]
 
     ACT_BIO = [ACT_BIO[i] + ACT_wood[i] for i in range(0, len(ACT_BIO))]
+    ACT_HYD = [ACT_HYD[i] + ACT_PUM[i]  for i in range(0, len(ACT_HYD))]
     
     ys    = np.array([ACT_BIO, ACT_OIL, ACT_HYD, ACT_NGA, 
-                      ACT_PUM, ACT_SOL, ACT_COA, ACT_NUC]
+                      ACT_SOL, ACT_COA, ACT_NUC]
                       )*1E-6 
     # ys    = np.array([ACT_BIO, ACT_HYD, ACT_NGA, 
     #                   ACT_SOL, ACT_COA, ACT_NUC]
     #                   )*1E-6 # TWh 
-    tech  = ['BIO', 'OIL', 'HYD', 'NGA', 'PUM', 'SOL', 'COA', 'NUC']
+    tech  = ['BIO', 'OIL', 'HYD', 'NGA', 'SOL', 'COA', 'NUC']
     # tech  = ['BIO', 'HYD', 'NGA', 'SOL', 'COA', 'NUC']
     tech.reverse()
     b     = [0]*len(year_his)
@@ -1007,7 +1048,7 @@ def plot_NCdemand_all():
     # box = ax.get_position()
     # ax.set_position([box.x0, box.y0, box.width*0.9, box.height])
     ax.legend(handles, 
-                ['Bioenergy', 'Oil', 'Hydro', 'Natural gas', 'Pumped hydro', 'Solar PV', 'Coal', 'Nuclear'], 
+                ['Bioenergy', 'Oil', 'Hydro', 'Natural gas', 'Solar PV', 'Coal', 'Nuclear'], 
                 # bbox_to_anchor = (1.01, 0.5), 
                 loc='lower right')
     ax.annotate('2015', xy=(2015, 200), xytext=(2013, 201), color='r')
@@ -1307,7 +1348,7 @@ def plot_emis_all(*arg):
     # ax.xaxis.grid(True)
     # box = ax.get_position()
     # ax.set_position([box.x0, box.y0, box.width*0.9, box.height])
-    legend_names = ['Coal', 'Natural gas', 'Other', 'Bioenergy', 'Oil', 'CPP', 'Duke Energy cap']
+    legend_names = ['Coal', 'Natural gas', 'Other', 'Bioenergy', 'Oil', 'Clean Power Plan', r'Modeled $\mathregular{CO}_2$ cap']
     i = legend_names.index('Bioenergy')
     handles.pop(i)
     legend_names.pop(i)

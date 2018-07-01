@@ -37,7 +37,8 @@ tech_map = {
     'EWNDOFS':      'WND',
     'EWNDOFD':      'WND',
     'EHYDCONR':     'HYD',
-    'EHYDREVR':     'PUM', # Pumped hydro
+    # 'EHYDREVR':     'PUM', # Pumped hydro
+    'EHYDREVR':     'HYD',
     'EMSWSTMR':     'BIO',
     'ELFGICER':     'BIO',
     'ELFGGTR':      'BIO',
@@ -70,7 +71,7 @@ emis_map = {
     }
 
 # http://www.rapidtables.com/web/color/RGB_Color.htm
-color_map = {
+my_color_map = {
     'NGA':         [0.7, 0.7, 0.7],
     'COA':         [0.0, 0.0, 0.0],
     'OIL':         [1.0, 0.0, 0.0],
@@ -89,7 +90,26 @@ color_map = {
     'other':       [1.0, 1.0, 1.0]
     }
 
-edge_map = {
+color_map = {
+    'NGA':         [192.0/255.0, 5/255.0, 22.0/255.0],
+    'COA':         [0.0, 0.0, 0.0],
+    'OIL':         [0.7, 0.7, 0.7],
+    'NUC':         [0.6, 0.0, 0.8],
+    'BIO':         [14.0/255.0, 81.0/255.0, 27.0/255.0],
+    'GEO':         [1.0, 0.5, 0.3],
+    'SOL':         [255.0/255.0, 230.0/255.0, 29.0/255.0],
+    'WND':         [102.0/255, 178.0/255.0, 1.0],
+    'HYD':         [0, 0, 204.0/255.0],
+    'PUM':         [0.4, 0.6, 0.9],
+    'GSR':         [1.0, 0.0, 0.0],
+    'CO2 control': 'black',
+    'NOx control': [0.5, 0.0, 0.0],
+    'SO2 control': 'green',
+    'EE':          'white',
+    'other':       [1.0, 1.0, 1.0]
+    }
+
+my_edge_map = {
     'NGA':         [0.7, 0.7, 0.7],
     'COA':         [0.0, 0.0, 0.0],
     'OIL':         [1.0, 0.0, 0.0],
@@ -100,6 +120,35 @@ edge_map = {
     'WND':         [0.0, 0.0, 1.0],
     'HYD':         [0.4, 0.6, 0.9],
     'PUM':         [0.4, 0.6, 0.9],
+    'GSR':         [1.0, 0.0, 0.0],
+    'CO2 control': 'black',
+    'NOx control': [0.5, 0.0, 0.0],
+    'SO2 control': 'green',
+    'EE':          'black',
+    'other':       [1.0, 1.0, 1.0]
+    }
+
+edge_map = {
+    # 'NGA':         [192.0/255.0, 5/255.0, 22.0/255.0],
+    # 'COA':         [0.0, 0.0, 0.0],
+    # 'OIL':         [0.7, 0.7, 0.7],
+    # 'NUC':         [0.6, 0.0, 0.8],
+    # 'BIO':         [0.0, 1.0, 0.0],
+    # 'GEO':         [1.0, 0.5, 0.3],
+    # 'SOL':         [255.0/255.0, 230.0/255.0, 29.0/255.0],
+    # 'WND':         [102.0/255, 178.0/255.0, 1.0],
+    # 'HYD':         [0, 0, 204.0/255.0],
+    # 'PUM':         [0.4, 0.6, 0.9],
+    'NGA':         'black',
+    'COA':         'black',
+    'OIL':         'black',
+    'NUC':         'black',
+    'BIO':         'black',
+    'GEO':         'black',
+    'SOL':         'black',
+    'WND':         'black',
+    'HYD':         'black',
+    'PUM':         'black',
     'GSR':         [1.0, 0.0, 0.0],
     'CO2 control': 'black',
     'NOx control': [0.5, 0.0, 0.0],
@@ -120,12 +169,12 @@ hatch_map = {
     'HYD':   None,
     'PUM':   '++',
     'GSR':   None,
-    'EE':    '//',
+    'EE':    None,
     'other': '++'
     }
 
 category_map = {
-    'Bioenergy':          'BIO',
+    'Biomass IGCC':       'BIO',
     'Coal':               'COA',
     'Oil':                'OIL',
     'EE':                 'EE',
@@ -133,9 +182,9 @@ category_map = {
     'Hydro':              'HYD',
     'Pumped hydro':       'PUM',
     'Natural gas':        'NGA',
-    'Solar PV':           'SOL',
+    'Utility PV':         'SOL',
     'Nuclear':            'NUC',
-    'Wind':               'WND',
+    'Onshore wind':       'WND',
     'Emission reduction': 'Emission reduction',
     'other':              'other',
     }
@@ -146,40 +195,43 @@ hatch_map['Emission reduction'] = None
 
 # Break-even cost graphs
 sen_color_map = {
-    'IC':    [0.9, 0.9, 0.9],
-    'L':     'black',
-    'R':     'black',
-    'H':     'black',
-    'CPP-L': 'green',
-    'CPP-R': 'green',
-    'CPP-H': 'green',
-    'cap-L': 'green',
-    'cap-R': 'green',
-    'cap-H': 'green',
+    'IC':     [0.9, 0.9, 0.9],
+    'L':      'black',
+    'R':      'black',
+    'H':      'black',
+    'CPP-L':  'green',
+    'CPP-R':  'green',
+    'CPP-H':  'green',
+    'cap-L':  'green',
+    'cap-R':  'green',
+    'cap-H':  'green',
+    'newRPS': 'blue',
 }
 
 sen_lstyle_map = {
-    'IC':    None,
-    'L':     '--',
-    'R':     '-',
-    'H':     'dotted',
-    'CPP-L': '--',
-    'CPP-R': '-',
-    'CPP-H': 'dotted',
-    'cap-L': '--',
-    'cap-R': '-',
-    'cap-H': 'dotted',
+    'IC':     None,
+    'L':      '--',
+    'R':      '-',
+    'H':      'dotted',
+    'CPP-L':  '--',
+    'CPP-R':  '-',
+    'CPP-H':  'dotted',
+    'cap-L':  '--',
+    'cap-R':  '-',
+    'cap-H':  'dotted',
+    'newRPS': '-',
 }
 
 sen_marker_map = {
-    'IC':    None,
-    'L':     's',
-    'R':     's',
-    'H':     's',
-    'CPP-L': 's',
-    'CPP-R': 's',
-    'CPP-H': 's',
-    'cap-L': 's',
-    'cap-R': 's',
-    'cap-H': 's',
+    'IC':     None,
+    'L':      's',
+    'R':      's',
+    'H':      's',
+    'CPP-L':  's',
+    'CPP-R':  's',
+    'CPP-H':  's',
+    'cap-L':  's',
+    'cap-R':  's',
+    'cap-H':  's',
+    'newRPS': 's',
 }

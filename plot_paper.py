@@ -59,6 +59,7 @@ def plot_breakeven(ax, years, scenarios, bic, ic, i_subplot=None):
             i_subplot,
             xy=(0.1, 0.9), xycoords='axes fraction',
             xytext=(.1, .9), textcoords='axes fraction',
+            fontsize=12,
                 )
     return handles
 
@@ -111,12 +112,29 @@ def plot_6bar_clustered(ax, periods, colortypes, scenarios, values):
 hfig = 4
 wfig = 10
 
-def plot_6panel(db):
+def plot_panel(db, scenario, title_names = None):
+    ns = len(scenario)
+    if ns%2 == 1:
+        ncols = 2
+        nrows = (ns + 1)/ncols
+    else:
+        ncols = 2
+        nrows = ns/ncols
     for figure_type in ['capacities', 'activities']:
-        fig = plt.figure(figsize=(wfig, hfig*3), dpi=80, facecolor='w', edgecolor='k')
-        gs = gridspec.GridSpec(3, 2, height_ratios=[1, 1, 1], width_ratios=[1, 1], hspace=0, wspace=0) 
+        fig = plt.figure(
+            figsize=(wfig/2.0*ncols, hfig*3.0/4*nrows),
+            dpi=80,
+            facecolor='w',
+            edgecolor='k',
+        )
+        gs = gridspec.GridSpec(
+            nrows, ncols,
+            height_ratios=[1]*nrows,
+            width_ratios=[1]*ncols,
+            hspace=0,
+            wspace=0,
+        ) 
         ax = list()
-        scenario = ['L', 'capL', 'R', 'capR', 'H', 'capH'] # First left, then down
         ymax = 0
         for s in scenario:
             instance = TemoaNCResult(db, s)
@@ -125,17 +143,24 @@ def plot_6panel(db):
             nc = sindex%2
             ax.append( plt.subplot( gs[nr, nc]) )
             techs  = instance.techs
-            techs.remove('EE')
             values = getattr( instance, figure_type )
             if figure_type == 'activities':
                 for t in values:
                     values[t] = [i/3.6 for i in values[t]]
+            else:
+                techs.remove('EE')
             handles = plot_bar(ax[sindex], instance.periods, instance.techs, values)
-            ax[sindex].text(
-                .5, .9, '('+ chr(ord('a')+sindex) +')',
-                horizontalalignment='center',
-                transform=ax[sindex].transAxes
-            )
+            if title_names:
+                ax[sindex].text(
+                    .5, .9,
+                    ' '.join([
+                        '(' + chr(ord('a')+sindex) + ')',
+                        title_names[sindex]
+                    ]),
+                    horizontalalignment='center',
+                    transform=ax[sindex].transAxes,
+                    fontsize=12,
+                )
             ylim = ax[sindex].get_ylim()
             if ymax < ylim[-1]:
                 ymax = ylim[-1]
@@ -143,20 +168,25 @@ def plot_6panel(db):
         for s in scenario:
             sindex = scenario.index(s)
             ax[sindex].set_ylim([0, ymax])
-        for i in range(0, 4):
+        for i in range( 0, ncols*(nrows - 1) ):
             plt.setp(ax[i].get_xticklabels(), visible=False)
         # plt.subplots_adjust(hspace=.0)
-        for i in range(1, 6, 2):
+        for i in range(1, ns, 2):
             plt.setp(ax[i].get_yticklabels(), visible=False)
         # plt.subplots_adjust(wspace=.0)
         plt.subplots_adjust(left=0.10, right=0.9, top=0.99)
-        for i in range( 4, 6 ):
+        for i in range( ncols*(nrows-1), ns ):
             ax[i].set_xlabel('Year')
-        for i in range(0, 5, 2):
+        for i in range(0, ns, 2):
             if figure_type == 'capacities':
                 ax[i].set_ylabel('Capacity (GW)')
             else:
-                ax[i].set_ylabel('Generation (TWh)')
+                ax[i].set_ylabel('Electricity production (TWh)')
+        if nrows >= 2:
+            for i in range(1, nrows):
+                yticks = ax[i*ncols].yaxis.get_major_ticks()
+                yticks[-1].label1.set_visible(False)
+
         techs_full = list()
         for t in techs:    
             t_full = [k for k, v in category_map.items() if v == t][0]
@@ -164,7 +194,7 @@ def plot_6panel(db):
         fig.legend(
             handles, techs_full, 
             loc='upper center', 
-            ncol=5, 
+            ncol=(len(handles)+len(handles)%2)/2, 
             bbox_to_anchor=(0.5, 0.065),
             edgecolor=None
         )
@@ -233,9 +263,17 @@ def plot_2panel(db):
 def plot_6breakeven(df_data):
     techs       = ['EWNDON', 'EWNDOFS', 'EURNALWR15', 'EURNSMR', 'ESOLPVDIS', 'EBIOIGCC', ]
     techs_range = ['EWNDON', 'EWNDOFS', 'EURNALWR15', 'EURNSMR', 'ESOLPVDIS', 'EBIOIGCC', ]
+    tech_name   = [
+        'Onshore wind',
+        'Offshore wind',
+        'Light water reactor',
+        'Small modular reactor',
+        'Residential PV',
+        'Biomass IGCC',
+    ]
 
     years = range(2015, 2055, 5)
-    scenarios_original = ['L', 'R', 'H', 'cap-L', 'cap-R', 'cap-H']
+    scenarios_original = ['L', 'R', 'H', 'cap-L', 'cap-R', 'cap-H', 'newRPS']
     scenarios_range = scenarios_original + ['Ldec', 'Linc', 'cap-Hdec', 'cap-Hinc']
 
     fig  = plt.figure(figsize=(wfig, hfig*3), dpi=80, facecolor='w', edgecolor='k')
@@ -266,7 +304,11 @@ def plot_6breakeven(df_data):
             & (df_data['technology']==t)
         ])[0: 8]
 
-        handles = plot_breakeven(ax[it], years, scenarios_original, bic, ic, '('+chr(ord('a') + it)+')')
+        title_subplot = ' '.join([
+            '('+chr(ord('a') + it)+')',
+            tech_name[it]
+        ])
+        handles = plot_breakeven(ax[it], years, scenarios_original, bic, ic, title_subplot)
         if t in techs_range:
             c = ['g', 'k']
             for s_lb, s_ub in [
@@ -285,18 +327,29 @@ def plot_6breakeven(df_data):
         if i%2 == 1:
             ax[i].yaxis.tick_right()
         if i%2 == 0:
-            ax[i].set_ylabel('Capital cost ($/MW)')
+            ax[i].set_ylabel('Capital cost ($/kW)')
         if i<len(ax)-2:
             plt.setp(ax[i].get_xticklabels(), visible=False)
         else:
             for tick in ax[i].get_xticklabels():
                 # tick.set_rotation(90)
                 pass
-
+    names_on_figure = {
+        'L':      'L',
+        'R':      'R',
+        'H':      'H',
+        'cap-L':  'Cap-L',
+        'cap-R':  'Cap-R',
+        'cap-H':  'Cap-H', 
+        'newRPS': 'REPS-R'
+    }
+    legend_names = list()
+    for i in scenarios_original:
+        legend_names.append(names_on_figure[i])
     fig.legend(
-        handles, scenarios_original+['Capex'], 
+        handles, legend_names+['Capex'], 
         loc='upper center', 
-        ncol=7, 
+        ncol=8, 
         bbox_to_anchor=(0.5, 0.08),
         edgecolor=None
     )
@@ -305,6 +358,7 @@ def plot_6breakeven(df_data):
     return fig
 
 def plot_abatement(db):
+    ex_2015_to_2018 = 1.06 # https://www.officialdata.org/2015-dollars-in-2018?amount=1
     SCC = {
         r'SC-$\mathregular{CO}_2$ 2.5%': [64, 71, 78, 84, 90, 97, 102, 109, ],
         r'SC-$\mathregular{CO}_2$ 3%':   [41, 48, 53, 58, 63, 69, 74,  79, ],
@@ -331,69 +385,96 @@ def plot_abatement(db):
     delta_cost = list()
     delta_emis = list()
     abatement  = list()
-    ITC_credit = [0, 0, 0, 0, 73]
+    ITC_credit = [0, 0, 0, 0, 73*ex_2015_to_2018]
     # At present it is hardwired, but in the future we should let the script 
     # to calculate it
     for i in range(0, len(cap_on)):
         s_on, s_off = cap_on[i], cap_off[i]
         delta_cost.append(cost[s_on] - cost[s_off])
         delta_emis.append(co2_emis[s_off] - co2_emis[s_on])
-        abatement.append(delta_cost[i]/delta_emis[i]*1000)
+        abatement.append(delta_cost[i]/delta_emis[i]*1000*ex_2015_to_2018)
+    abatement.append(0)
+    ITC_credit.append(0)
+    SCC5_b = [0, 0, 0, 0, 0, min(SCC[r'SC-$\mathregular{CO}_2$ 5%'])*ex_2015_to_2018 ]
+    SCC5_t = [0, 0, 0, 0, 0, max(SCC[r'SC-$\mathregular{CO}_2$ 5%'])*ex_2015_to_2018 ]
 
-    fig  = plt.figure(figsize=(wfig, hfig), dpi=80, facecolor='w', edgecolor='k')
-    gs   = gridspec.GridSpec(1, 2, height_ratios=[1], width_ratios=[1, 1], hspace=0, wspace=0)
+    # fig  = plt.figure(figsize=(wfig, hfig), dpi=80, facecolor='w', edgecolor='k')
+    # gs   = gridspec.GridSpec(1, 2, height_ratios=[1], width_ratios=[1, 1], hspace=0, wspace=0)
     axes = list()
     handles = list()
     legends = list()
 
     # CO2 abatement cost
-    ax = plt.subplot(gs[0])
+    # xlabelnames.append(r'SC-$\mathregular{CO}_2$ 5%')
+    xlabelnames = ['Cap-L', 'Cap-R', 'Cap-H', 'REPS-R', 'REPS-R-ITC', ' ']
+    fig = plt.figure()
+    ax = plt.subplot()
     axes.append(ax)
     h = ax.bar(
-        xlabelnames,
-        abatement,
+        xlabelnames[0: -1],
+        abatement[0: -1],
         facecolor = 'white',
         edgecolor = 'black',
     )
     legends.append('abatement cost')
     handles.append(h)
     h = ax.bar(
-        xlabelnames,
-        ITC_credit,
-        bottom=abatement,
+        xlabelnames[0: -1],
+        ITC_credit[0: -1],
+        bottom=abatement[0: -1],
         facecolor = 'black',
         edgecolor = 'black',
     )
-    box = ax.get_position()
-    ax.set_position([box.x0, box.y0 + box.height * 0.15,
-            box.width, box.height * 0.95])
+    # box = ax.get_position()
+    # ax.set_position([box.x0, box.y0 + box.height * 0.15,
+    #         box.width, box.height * 0.95])
     handles.append(h)
     legends.append('ITC')
+    h = ax.bar(
+        xlabelnames,
+        SCC5_t,
+        bottom=SCC5_b,
+        facecolor = [0.5, 0.5, 0.5],
+        edgecolor = [0.5, 0.5, 0.5],
+    )
+    legends.append(r'SC-$\mathregular{CO}_2$, 5% discount rate')
+    handles.append(h)
     ylim = ax.get_ylim()
     if ymax < ylim[-1]:
         ymax = ylim[-1]
     ax.tick_params(axis='x', length=0)
     tmp_ylabel = r'$\mathregular{CO}_2$ abatement cost (' + '\$/tonne ' + r'$\mathregular{CO}_2$)'
     ax.set_ylabel(tmp_ylabel)
-    barnames = ['cap-L', 'cap-R', 'cap-H', 'newREPS', 'newREPS + ITC']
+    barnames = ['cap-L', 'cap-R', 'cap-H', 'REPS-R', 'REPS-R-ITC']
+    # ax.text(
+    #         0.09, 0.5, 'cap-L', transform=ax.transAxes,
+    #     )
+    # ax.text(
+    #         0.27, 0.45, 'cap-R', transform=ax.transAxes,
+    #     )
+    # ax.text(
+    #         0.45, 0.35, 'cap-H', transform=ax.transAxes,
+    #     )
+    # ax.text(
+    #         0.61, 0.30, 'newREPS', transform=ax.transAxes,
+    #     )
+    # ax.text(
+    #         0.81, 0.8, 'newREPS\n+ITC', transform=ax.transAxes,
+    #     )
     ax.text(
-            0.09, 0.5, 'cap-L', transform=ax.transAxes,
-        )
-    ax.text(
-            0.27, 0.45, 'cap-R', transform=ax.transAxes,
-        )
-    ax.text(
-            0.45, 0.35, 'cap-H', transform=ax.transAxes,
-        )
-    ax.text(
-            0.61, 0.30, 'newREPS', transform=ax.transAxes,
-        )
-    ax.text(
-            0.81, 0.8, 'newREPS\n+ITC', transform=ax.transAxes,
-        )
+        0.84, 0.5, r'SC-$\mathregular{CO}_2$', transform=ax.transAxes,
+    )
+    plt.legend(
+        handles, legends, 
+        loc='upper left', 
+        # ncol=5, 
+        # bbox_to_anchor=(0.5, 0.07),
+        # edgecolor=None
+    )
 
     # SCC CO2 cost
-    ax = plt.subplot(gs[1])
+    fig = plt.figure(0)
+    ax = plt.subplot()
     axes.append(ax)
     # handles = list()
     # legends = list()
@@ -419,27 +500,42 @@ def plot_abatement(db):
     ax.set_ylabel(tmp_ylabel)
     ax.yaxis.set_label_position("right")
 
-    for ax in axes:
-        ax.set_ylim([0, ymax])
-        ax.text(
-                    .5, .9, '('+ chr(ord('b')+axes.index(ax)) +')',
-                    horizontalalignment='center',
-                    transform=ax.transAxes
-                )
-    plt.subplots_adjust(left=0.10, right=0.9, top=0.99)
-    plt.setp(axes[0].get_xticklabels(), visible=False)
-    fig.legend(
-        handles, legends, 
-        loc='upper center', 
-        ncol=5, 
-        bbox_to_anchor=(0.5, 0.07),
-        edgecolor=None
-    )
+    # for ax in axes:
+    #     ax.set_ylim([0, ymax])
+    #     ax.text(
+    #                 .5, .9, '('+ chr(ord('b')+axes.index(ax)) +')',
+    #                 horizontalalignment='center',
+    #                 transform=ax.transAxes
+    #             )
+    # plt.subplots_adjust(left=0.10, right=0.9, top=0.99)
+    # plt.setp(axes[0].get_xticklabels(), visible=False)
+    # fig.legend(
+    #     handles, legends, 
+    #     loc='upper center', 
+    #     ncol=5, 
+    #     bbox_to_anchor=(0.5, 0.07),
+    #     edgecolor=None
+    # )
 
-def plot_6load_ts(db):
+def plot_6load_ts(db, remove_spike=False):
+    names_on_figure = {
+        'L':      'L',
+        'R':      'R',
+        'H':      'H',
+        'capL':   'Cap-L',
+        'capR':   'Cap-R',
+        'capH':   'Cap-H', 
+        'newRPS': 'REPS-R'
+    }
     for this_p in range(2015, 2055, 5):
         fig = plt.figure(figsize=(wfig, hfig*3), dpi=80, facecolor='w', edgecolor='k')
-        gs = gridspec.GridSpec(3, 2, height_ratios=[1, 1, 1], width_ratios=[1, 1], hspace=0.05, wspace=0.05) 
+        gs = gridspec.GridSpec(
+            3, 2,
+            height_ratios=[1, 1, 1],
+            width_ratios=[1, 1],
+            hspace=0.05,
+            wspace=0.05,
+        ) 
         ax = list()
         scenario = ['L', 'capL', 'R', 'capR', 'H', 'capH'] # First left, then down
         ymax = 0
@@ -449,12 +545,14 @@ def plot_6load_ts(db):
             nr = (sindex - (sindex%2))/2
             nc = sindex%2
             ax.append( plt.subplot( gs[nr, nc]) )
-            area_handles, area_names = plot_load_ts(ax[sindex], instance, this_p)
-            ax[sindex].text(
-                .5, .9, '('+ chr(ord('a')+sindex) +')',
-                horizontalalignment='center',
-                transform=ax[sindex].transAxes
-            )
+            index_text = '('+ chr(ord('a')+sindex) +')' + ' ' + names_on_figure[s]
+            area_handles, area_names = plot_load_ts(ax[sindex], instance, this_p, index_text, remove_spike)
+            # ax[sindex].text(
+            #     .5, .9, '('+ chr(ord('a')+sindex) +')',
+            #     horizontalalignment='center',
+            #     transform=ax[sindex].transAxes,
+            #     fontsize=12,
+            # )
             ylim = ax[sindex].get_ylim()
             if ymax < ylim[-1]:
                 ymax = ylim[-1]
@@ -472,12 +570,12 @@ def plot_6load_ts(db):
         for i in range( 4, 6 ):
             ax[i].set_xlabel('Time slice')
         for i in range(0, 5, 2):
-            ax[i].set_ylabel('Load (GW)')
+            ax[i].set_ylabel('Average power (GW)')
 
         fig.legend(
             area_handles, area_names, 
             loc='upper center', 
-            ncol=6, 
+            ncol=(len(area_names) + len(area_names)%2)/2, 
             bbox_to_anchor=(0.5, 0.065),
             edgecolor=None
         )
