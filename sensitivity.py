@@ -129,6 +129,11 @@ def validate_coef(c0, instance, target_tech, target_year):
         return False
 
 def sensitivity(dat, techs):
+    # This function performs break-even analysis for technologies specified in 
+    # the argument techs. It uses suffix from Pyomo and returns the breakeven 
+    # cost as screen outputs. Note that the Pyomo suffix sometimes returns 
+    # anomalous values, and that's why I create another function, 
+    # sensitivity_api() to use Python API for CPLEX.
     from temoa_model import temoa_create_model
     model = temoa_create_model()
     
@@ -244,8 +249,12 @@ def sensitivity(dat, techs):
                     print p, s, tod, instance.dual[instance.DemandConstraint[p,s,tod,c]], instance.slack[instance.DemandConstraint[p,s,tod,c]]
 
 def sensitivity_api(instance, techs, algorithm=None):
+    # This code block realizes the same function as sensitivity(), however 
+    # because I am using Python API for CPLEX here, it only works when the 
+    # solver is CPLEX. I also updated the returned value and now it is a pandas 
+    # DataFramework, which supports fast csv creation.
     import cplex
-    instance.write('tmp.lp', io_options={'symbolic_solver_labels':True})
+    instance.write('tmp.lp')
     c = cplex.Cplex('tmp.lp')
     os.remove('tmp.lp')
     c.set_results_stream(None) # Turn screen output off
@@ -368,8 +377,13 @@ def sensitivity_api(instance, techs, algorithm=None):
     return msg, pd.DataFrame(results)
 
 def bin_search(tech, vintage, dat, eps = 0.01, all_v = False):
-    # Sensitivity analysis by binary search to find break-even scaling factor 
-    # for a technology.
+    # This code block performs breakeven analysis by brutal force in an 
+    # iterative way. I did this because sometimes sensitivity() and 
+    # sensitivity_api() return anomalous values. Note that this code block 
+    # returns the absolutely correct breakeven costs, however, it is 
+    # significantly more time-consuming, since it takes 8-9 instances to 
+    # calculate the breakeven cost of just one technology of one vintage.
+    # Arguments are defined below:
     # tech     -> Target technology.
     # vintage  -> Target vintage. It is break-even when capacity in this year >= 0 
     # dat      -> A list of .dat files.
@@ -377,8 +391,8 @@ def bin_search(tech, vintage, dat, eps = 0.01, all_v = False):
     # all_v    -> A flag used indicate the costs of which vintages are subject 
     # to change. If it is FALSE, then only the investment costs and fixed costs
     # in the target vintage will be altered, otherwise all vintages are affected
-    # Note that, only the capacity in the target vintage will be monitored and 
-    # be used as the signal of break-even.
+    # Note that, only the capacity of the target vintage will be monitored and 
+    # be used to signal breakeven.
     monitor_year = vintage
     monitor_tech = tech
 
@@ -462,6 +476,23 @@ def bin_search(tech, vintage, dat, eps = 0.01, all_v = False):
     return (scale_u + scale_l)/2.0
 
 def cplex_search(t, v, cplex_instance, eps = 0.01, all_v=False):
+    # This code block performs breakeven analysis by brutal force in an 
+    # iterative way. However, it differs from bin_search() in that this function 
+    # saves instance creation time by modifying the LP model coefficients in the 
+    # CPLEX instance directly. By contrast, bin_search() has to create a new lp 
+    # file each iteration after model coefficients are updated, which is 
+    # time-consuming since Pyomo is notorious slow in model instantiation and 
+    # creation. Other than that, these two functions are the same.
+    # Arguments are defined below:
+    # tech     -> Target technology.
+    # vintage  -> Target vintage. It is break-even when capacity in this year >= 0 
+    # dat      -> A list of .dat files.
+    # eps      -> Convergence tolerance
+    # all_v    -> A flag used indicate the costs of which vintages are subject 
+    # to change. If it is FALSE, then only the investment costs and fixed costs
+    # in the target vintage will be altered, otherwise all vintages are affected
+    # Note that, only the capacity of the target vintage will be monitored and 
+    # be used to signal breakeven.
 
     def return_row(c0, scale, capacity):
         row = {
@@ -917,342 +948,6 @@ def explore_Cost_marginal(dat):
     #         for s in instance.time_season:
     #             for tod in instance.time_of_day:
     #                 print p, s, tod, instance.dual[instance.DemandConstraint[p,s,tod,c]], instance.slack[instance.DemandConstraint[p,s,tod,c]]
-
-def LC_calculate(dat):
-
-    # Electricity generating technologies
-    tech_gen = [
-        'IMPELCNGCEA',
-        'IMPELCNGAEA',
-        'IMPELCDSLEA',
-        'IMPURNA',
-        'IMPELCBIGCCEA',
-        'IMPELCBIOSTM',
-        'IMPELCGEO',
-        'IMPSOL',
-        'IMPWND',
-        'IMPELCHYD',
-        'IMPLFGICEEA',
-        'IMPLFGGTREA',
-        'IMPELCCOAB',
-
-        'ENGACC05',
-        'ENGACT05',
-        'ENGAACC',
-        'ENGAACT',
-        'ENGACCCCS',
-        'ENGACCR',
-        'ENGACTR',
-        'ECOALSTM',
-        'ECOALIGCC',
-        'ECOALIGCCS',
-        'ECOASTMR',
-        'EDSLCTR',
-        'EURNALWR',
-        'EURNALWR15',
-        'EBIOIGCC',
-        'EBIOSTMR',        
-        'EGEOBCFS',        
-        'ESOLPVCEN',       
-        'ESOLSTCEN',       
-        'ESOLPVR',         
-        'EWNDON',          
-        'EWNDOFS',         
-        'EWNDOFD',         
-        'EHYDCONR',        
-        'EHYDREVR',        
-        'ELFGICER',        
-        'ELFGGTR',         
-        'EHYDGS']
-    
-    tech_misc = [
-        'E_BLND_BITSUBLIG_COALSTM_R',   # blending tech to collect bit subbit and lig coal for existing coal steam plant');
-        'E_BLND_BIT_COALSTM_R',         # blending tech to collect bit coal for existing coal steam plant');
-        'E_PTNOXSCR_COAB',              # nox passthrough tech for bituminous coal after LNB retrofit or passthrough and before existing coal steam plant');
-        'E_PTNOXLNB_COAB',              # nox passthrough tech for bituminous coal after so2 or co2 passthrough and before SCR or SNCR or passthrough');
-        'E_PTCO2_COAB',                 # co2 passthrough tech for bituminous coal after FGD and before LNB');
-        'E_EA_COAB',                    # co2 emission accounting tech for coal bituminous');
-        'E_PTSO2_COABH',                # passthrough tech with no so2 removal from bit high sulfur before existing coal steam plant');
-        'E_PTSO2_COABM',                # passthrough tech with no so2 removal from bit medium sulfur before existing coal steam plant');
-        'E_PTSO2_COABL',                # passthrough tech with no so2 removal from bit low sulfur before existing coal steam plant');
-        'E_BLND_BITHML_COALIGCC_N',     # blending tech to collect high medium low sulfur bit coal for new coal IGCC plant');
-        'E_BLND_BITSUBLIG_COALSTM_N',   # blending tech to collect bit subbit and lig coal for new coal steam plant');
-        'E_BLND_BITHML_COALSTM_N',      # blending tech to collect high medium low sulfur bit coal for new coal steam plant');
-        'ELC2DMD'
-        ]
-    
-    # NOx removal technologies
-    tech_NOx = [
-        'E_LNBSNCR_COAB_R', # Existing LNB w/SNCR retrofit for nox removal from BIT before existing coal STM');
-        'E_LNBSNCR_COAB_N', # new LNB combined with SNCR retrofit for nox removal from bituminous before existing coal steam plant');
-        'E_LNBSCR_COAB_R',  # existing LNB combined with SCR retrofit for nox removal from bituminous before existing coal steam plant');
-        'E_LNBSCR_COAB_N',  # new LNB combined with SCR retrofit for nox removal from bituminous before existing coal steam plant');
-        'E_SNCR_COAB_R',    # existing SNCR retrofit for nox removal from bituminous before existing coal steam plant');
-        'E_SNCR_COAB_N',    # new SNCR retrofit for nox removal from bituminous before existing coal steam plant');
-        'E_SCR_COAB_N',     # new SCR retrofit for nox removal from bituminous before existing coal steam plant');
-        'E_LNB_COAB_R',     # existing LNB retrofit tech for nox removal from bituminous before existing coal steam plant');
-        'E_LNB_COAB_N'     # new LNB retrofit tech for nox removal from bituminous before existing coal steam plant
-        ]
-    
-    # SO2 removal technologies
-    tech_SO2 = [
-        'E_FGD_COABH_N', # new FGD retrofit tech for so2 removal from bit high sulfur before existing coal steam plant');
-        'E_FGD_COABM_R', # existing FGD retrofit tech for so2 removal from bit medium sulfur before existing coal steam plant');
-        'E_FGD_COABM_N', # new FGD retrofit tech for so2 removal from bit medium sulfur before existing coal steam plant');
-        'E_FGD_COABL_R', # existing FGD retrofit tech for so2 removal from bit low sulfur before existing coal steam plant');
-        'E_FGD_COABL_N'  # new FGD retrofit tech for so2 removal from bit low sulfur before existing coal steam plant');
-        ]
-    
-    # CO2 removal technologies
-    tech_CO2 = [
-        'E_CCR_COAB',                   # co2 capture retrofit tech for bituminous coal to existing power plant located after FGD or passthrough and before LNB');
-        'E_CCR_COALIGCC_N',             # co2 capture retrofit tech before coal IGCC plant');
-        'E_CCR_COALSTM_N',              # co2 capture retrofit tech before new coal steam plant');
-        'E_BLND_BITSUBLIG_COALIGCC_N'   # blending tech to collect bit subbit and lig coal for new coal IGCC plant');
-        ]
-
-    data = DataPortal(model = model)
-    data.load(filename=dat)
-    instance = model.create_instance(data)
-    optimizer = SolverFactory('cplex')
-    results = optimizer.solve(instance, suffixes=['dual', 'rc', 'slack', 'lrc'])
-    instance.solutions.load_from(results)
-
-    m = instance
-    TAE  = dict()
-    # Cost format: [Gen, NOx, SO2, CO2, misc] where misc supposed to be 0, 
-    # otherwise there is something wrong with the cost classification table.
-    TAIC = dict() # Total annualized investment cost
-    TAFC = dict() # Total annualized fixed O&M cost
-    TAVC = dict() # Total annualized variable O&M cost
-    TAMC = dict() 
-    TAC  = dict() # Total annualized cost
-    
-    LCOE = dict() # Levelized cost of energy
-    LCOI = dict() # Levelized cost of investment
-    LCOF = dict() # Levelized cost of fixed O&M
-    LCOV = dict() # Levelized cost of variable O&M
-
-    for year in m.time_optimize:
-        year_str = str(year)
-
-        # Annual energy output
-        TAE[year_str] = sum(
-            1/3.6 # Convert PJ to TWh
-            *value( m.V_ActivityByPeriodTechAndOutput[S_p, S_t, S_o] )
-            for S_p, S_t, S_o in m.V_ActivityByPeriodTechAndOutput.iterkeys()
-            if S_p == year and S_o == 'ELC'
-            )
-        
-        # Annualized investment cost
-        TAIC[year_str] = [0, 0, 0, 0, 0] 
-        TAFC[year_str] = [0, 0, 0, 0, 0] 
-        TAVC[year_str] = [0, 0, 0, 0, 0] 
-        for S_t, S_v in m.CostInvest.sparse_iterkeys():
-            if S_v == year:
-                if S_t in tech_gen:
-                    TAIC[year_str][0] += (
-                        value( m.CostInvest[S_t, S_v] )
-                        *value( m.LoanAnnualize[S_t, S_v] )
-                        *value( m.V_Capacity[S_t, S_v] )
-                    )
-                elif S_t in tech_NOx:
-                    TAIC[year_str][1] += (
-                        value( m.CostInvest[S_t, S_v] )
-                        *value( m.LoanAnnualize[S_t, S_v] )
-                        *value( m.V_Capacity[S_t, S_v] )
-                    )
-                elif S_t in tech_SO2:
-                    TAIC[year_str][2] += (
-                        value( m.CostInvest[S_t, S_v] )
-                        *value( m.LoanAnnualize[S_t, S_v] )
-                        *value( m.V_Capacity[S_t, S_v] )
-                    )
-                elif S_t in tech_CO2:
-                    TAIC[year_str][3] += (
-                        value( m.CostInvest[S_t, S_v] )
-                        *value( m.LoanAnnualize[S_t, S_v] )
-                        *value( m.V_Capacity[S_t, S_v] )
-                    )
-                else:
-                    TAIC[year_str][4] += (
-                        value( m.CostInvest[S_t, S_v] )
-                        *value( m.LoanAnnualize[S_t, S_v] )
-                        *value( m.V_Capacity[S_t, S_v] )
-                    )
-            else:
-                continue
-        
-        # Annualized fixed cost
-        for S_p, S_t, S_v in m.CostFixed.sparse_iterkeys():
-            if S_p == year:
-                if S_t in tech_gen:
-                    TAFC[year_str][0] += (
-                        value( m.CostFixed[S_p, S_t, S_v] )
-                        *value( m.V_Capacity[S_t, S_v] )
-                    )
-                elif S_t in tech_NOx:
-                    TAFC[year_str][1] += (
-                        value( m.CostFixed[S_p, S_t, S_v] )
-                        *value( m.V_Capacity[S_t, S_v] )
-                    )
-                elif S_t in tech_SO2:
-                    TAFC[year_str][2] += (
-                        value( m.CostFixed[S_p, S_t, S_v] )
-                        *value( m.V_Capacity[S_t, S_v] )
-                    )
-                elif S_t in tech_CO2:
-                    TAFC[year_str][3] += (
-                        value( m.CostFixed[S_p, S_t, S_v] )
-                        *value( m.V_Capacity[S_t, S_v] )
-                    )
-                else:
-                    TAFC[year_str][4] += (
-                        value( m.CostFixed[S_p, S_t, S_v] )
-                        *value( m.V_Capacity[S_t, S_v] )
-                    )
-            else:
-                continue
-        
-        # Annualized variable cost
-        for S_p, S_t, S_v in m.CostVariable.sparse_iterkeys():
-            if S_p == year:
-                if S_t in tech_gen:
-                    TAVC[year_str][0] += (
-                        value( m.CostVariable[S_p, S_t, S_v] )
-                        *value( m.V_ActivityByPeriodAndProcess[S_p, S_t, S_v] )
-                    )
-                elif S_t in tech_NOx:
-                    TAVC[year_str][1] += (
-                        value( m.CostVariable[S_p, S_t, S_v] )
-                        *value( m.V_ActivityByPeriodAndProcess[S_p, S_t, S_v] )
-                    )
-                elif S_t in tech_SO2:
-                    TAVC[year_str][2] += (
-                        value( m.CostVariable[S_p, S_t, S_v] )
-                        *value( m.V_ActivityByPeriodAndProcess[S_p, S_t, S_v] )
-                    )
-                elif S_t in tech_CO2:
-                    TAVC[year_str][3] += (
-                        value( m.CostVariable[S_p, S_t, S_v] )
-                        *value( m.V_ActivityByPeriodAndProcess[S_p, S_t, S_v] )
-                    )
-                else:
-                    TAVC[year_str][4] += (
-                        value( m.CostVariable[S_p, S_t, S_v] )
-                        *value( m.V_ActivityByPeriodAndProcess[S_p, S_t, S_v] )
-                    )
-            else:
-                continue
-
-        TAC[year_str] = [
-            TAIC[year_str][i] + 
-            TAFC[year_str][i] + 
-            TAVC[year_str][i] for i in range( 0, len(TAIC[year_str]) )
-        ]
-        LCOE[year_str] = [ i/TAE[year_str] for i in TAC[year_str] ]
-
-        LCOI[year_str] = [ i/TAE[year_str] for i in TAIC[year_str] ]
-        LCOF[year_str] = [ i/TAE[year_str] for i in TAFC[year_str] ]
-        LCOV[year_str] = [ i/TAE[year_str] for i in TAVC[year_str] ]
-        
-        # print year_str, LCOE[year_str], sum(LCOI[year_str]), sum(LCOF[year_str]), sum(LCOV[year_str])
-
-    return LCOI, LCOF, LCOV 
-
-def do_LCcalculate():
-    # print "Reference scenario"
-    # dat = 'sql/reference.dat'
-    # LC_calculate(dat)
-    # print "High oil scenario"
-    # dat = 'sql/reference.high_oil.dat'
-    # LC_calculate(dat)
-    # print "Low oil scenario"
-    # dat = 'sql/reference.high_res.dat'
-    # LC_calculate(dat)
-
-    # print "CPP scenario"
-    # dat = 'sql/cpp.dat'
-    # LC_calculate(dat)
-    # print "CPP + high oil scenario"
-    # dat = 'sql/cpp.high_oil.dat'
-    # LC_calculate(dat)
-    # print "CPP + low oil scenario"
-    # dat = 'sql/cpp.high_res.dat'
-    # LC_calculate(dat)
-
-    print "Test scenario"
-    dat = 'sql20151124.test.dat'
-    LC_calculate(dat)
-
-def plot_LCOE():
-    periods = range(2015, 2055, 5)
-    LCOI = dict()
-    LCOF = dict()
-    LCOV = dict()
-    scenarios = {'R':     'sql20151124/reference.dat',
-                 'LF':    'sql20151124/reference.high_res.dat',
-                 'HF':    'sql20151124/reference.high_oil.dat',
-                 'CPP':   'sql20151124/cpp.dat',
-                 'CPPLF': 'sql20151124/cpp.high_res.dat',
-                 'CPPHF': 'sql20151124/cpp.high_oil.dat'
-                }
-    for s in scenarios.keys():
-        print "Scenario: ", s
-        LCOI_split, LCOF_split, LCOV_split = LC_calculate(scenarios[s])
-        LCOI[s] = [sum(LCOI_split[str(p)]) for p in periods]
-        LCOF[s] = [sum(LCOF_split[str(p)]) for p in periods]
-        LCOV[s] = [sum(LCOV_split[str(p)]) for p in periods]
-
-    bar_width = 0.7
-    left_position = np.array(range(2015, 2055, 5))
-    # c_ref = [0.1, 0.1, 0.1]
-    # c_cpp = 'g'
-    colors = {
-        'LF':    [1, 1, 1],
-        'R':     [1, 1, 1],
-        'HF':    [1, 1, 1],
-        'CPPLF': [0, 1, 0],
-        'CPP':   [0, 1, 0],
-        'CPPHF': [0, 1, 0]
-    }
-    hatchs = {
-        'LF':    '/',
-        'R':     None,
-        'HF':    '\\',
-        'CPPLF': '/',
-        'CPP':   None,
-        'CPPHF': '\\'
-    }
-    handles = list()
-
-    for s in ['LF', 'R', 'HF', 'CPPLF', 'CPP', 'CPPHF']:
-        h = plt.bar(left_position, np.array(LCOV[s]), 
-                    bar_width, 
-                    # alpha=0.3, 
-                    color=[0.9*i for i in colors[s]],
-                    hatch=hatchs[s])
-        handles.append(h)
-        h = plt.bar(left_position, np.array(LCOF[s]),
-                    bar_width, 
-                    bottom=np.array(LCOV[s]),
-                    # alpha=0.5, 
-                    color=[0.5*i for i in colors[s]],
-                    hatch=hatchs[s])
-        handles.append(h)
-        h = plt.bar(left_position, np.array(LCOI[s]),
-                    bar_width, 
-                    bottom=np.array(LCOV[s])+np.array(LCOF[s]),
-                    # alpha=1, 
-                    color=[0.2*i for i in colors[s]],
-                    hatch=hatchs[s])
-        handles.append(h)
-        left_position = left_position + bar_width
-
-    plt.xlabel('Periods')
-    plt.ylabel('LCOE ($/MWh)')
-    plt.xticks(left_position-3*bar_width, [str(p) for p in range(2015, 2055, 5)])
-    plt.show()
 
 def plot_breakeven(years, bic, ic):
     # bic is a dictionary, ic is a list of the raw investment costs
