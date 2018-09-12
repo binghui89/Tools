@@ -123,7 +123,7 @@ def validate_coef(c0, instance, target_tech, target_year):
     ) 
     c = c_i + c_f
 
-    if (c - c0) <= 1E-5:
+    if value(c - c0) <= 1E-5: # Compatible with Pyomo 5.5
         return True
     else:
         return False
@@ -233,7 +233,6 @@ def sensitivity(dat, techs):
             value(instance.V_Capacity[t, v])
             )
 
-    IP()
     print 'Dual and slack variables for emission caps:'
     for e in instance.commodity_emissions:
         for p in instance.time_optimize:
@@ -254,7 +253,7 @@ def sensitivity_api(instance, techs, algorithm=None):
     # solver is CPLEX. I also updated the returned value and now it is a pandas 
     # DataFramework, which supports fast csv creation.
     import cplex
-    instance.write('tmp.lp')
+    instance.write('tmp.lp', io_options={'symbolic_solver_labels':True})
     c = cplex.Cplex('tmp.lp')
     os.remove('tmp.lp')
     c.set_results_stream(None) # Turn screen output off
@@ -310,12 +309,12 @@ def sensitivity_api(instance, techs, algorithm=None):
                 cub = 0 # Infinity
             clb_s[t, v], cub_s[t, v] = clb, cub
             if not validate_coef(c0, instance, t, v):
-                print 'Error!'
+                print 'Error: Check coefficients!'
                 sys.exit(0)
             coef_CAP[t, v] = c0
             scal_CAP[t, v] = clb/c0 # Must reduce TO this percentage
-            bic_s[t].append(scal_CAP[t, v]*instance.CostInvest[t, v])
-            ic_s[t].append(instance.CostInvest[t, v])
+            bic_s[t].append(scal_CAP[t, v]*value( instance.CostInvest[t, v] ))
+            ic_s[t].append(value(instance.CostInvest[t, v]))
             cap_s[t].append( c.solution.get_values(target_var) )
 
         print "{:>10s}\t{:>7s}\t{:>6s}\t{:>4s}\t{:>6s}\t{:>5s}\t{:>7s}\t{:>7s}\t{:>5s}\t{:>3s}\t{:>5s}".format('Tech','Vintage', 'L. CB', 'Coef', 'U. CB', 'Scale', 'BE IC', 'BE FC', 'IC', 'FC', 'Cap')
@@ -323,8 +322,8 @@ def sensitivity_api(instance, techs, algorithm=None):
         msg == '\n'
         for v in vintages:
             deployed = abs(cap_s[t][vintages.index(v)]) >= 1E-3
-            tmp_beic_cs = instance.CostInvest[t, v] if deployed else scal_CAP[t, v]*instance.CostInvest[t, v]
-            tmp_befc_cs = instance.CostFixed[v, t, v] if deployed else scal_CAP[t, v]*instance.CostFixed[v, t, v]
+            tmp_beic_cs = value(instance.CostInvest[t, v]) if deployed else scal_CAP[t, v]*value(instance.CostInvest[t, v])
+            tmp_befc_cs = value(instance.CostFixed[v, t, v]) if deployed else scal_CAP[t, v]*value(instance.CostFixed[v, t, v])
             tmp_bes_cs  = 1 if deployed else scal_CAP[t, v]
             row = {
                 'algorithm':         algorithm,
@@ -335,10 +334,10 @@ def sensitivity_api(instance, techs, algorithm=None):
                 'coefficient':       coef_CAP[t, v],
                 'coef upper bound':  cub_s[t, v],
                 'scale':             scal_CAP[t, v],
-                'BE IC':             scal_CAP[t, v]*instance.CostInvest[t, v], 
-                'BE FC':             scal_CAP[t, v]*instance.CostFixed[v, t, v],
-                'IC':                instance.CostInvest[t,v],
-                'FC':                instance.CostFixed[v, t, v],
+                'BE IC':             scal_CAP[t, v]*value(instance.CostInvest[t, v]),
+                'BE FC':             scal_CAP[t, v]*value(instance.CostFixed[v, t, v]),
+                'IC':                value(instance.CostInvest[t,v]),
+                'FC':                value(instance.CostFixed[v, t, v]),
                 'capacity':          cap_s[t][vintages.index(v)],
                 'BE IC (CS)':        tmp_beic_cs, 
                 'BE FC (CS)':        tmp_befc_cs,
@@ -352,10 +351,10 @@ def sensitivity_api(instance, techs, algorithm=None):
             coef_CAP[t, v],
             cub_s[t, v],
             scal_CAP[t, v],
-            scal_CAP[t, v]*instance.CostInvest[t, v], 
-            scal_CAP[t, v]*instance.CostFixed[v, t, v], # Use the FC of the first period
-            instance.CostInvest[t,v],
-            instance.CostFixed[v, t, v],
+            scal_CAP[t, v]*value(instance.CostInvest[t, v]), 
+            scal_CAP[t, v]*value(instance.CostFixed[v, t, v]), # Use the FC of the first period
+            value(instance.CostInvest[t,v]),
+            value(instance.CostFixed[v, t, v]),
             cap_s[t][vintages.index(v)]
             )
 
@@ -366,10 +365,10 @@ def sensitivity_api(instance, techs, algorithm=None):
             coef_CAP[t, v],
             cub_s[t, v],
             scal_CAP[t, v],
-            scal_CAP[t, v]*instance.CostInvest[t, v], 
-            scal_CAP[t, v]*instance.CostFixed[v, t, v], # Use the FC of the first period
-            instance.CostInvest[t,v],
-            instance.CostFixed[v, t, v],
+            scal_CAP[t, v]*value(instance.CostInvest[t, v]), 
+            scal_CAP[t, v]*value(instance.CostFixed[v, t, v]), # Use the FC of the first period
+            value(instance.CostInvest[t,v]),
+            value(instance.CostFixed[v, t, v]),
             cap_s[t][vintages.index(v)]
             )
             msg += '\n'
