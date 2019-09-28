@@ -95,34 +95,34 @@ def plot_LCOE(LCOI, LCOF, LCOV):
 	left_position = np.array(range(2015, 2055, 5))
 	# scenarios = ['LF', 'R', 'HF', 'CPPLF', 'CPP', 'CPPHF']
 	colors = {
-		'LF':    [1, 1, 1],
+		'L':    [1, 1, 1],
 		'R':     [1, 1, 1],
 		'HF':    [1, 1, 1],
-		'HD':    [1, 1, 1],
-		'CPPLF': [0, 1, 0],
+		'H':    [1, 1, 1],
+		'CPPL': [0, 1, 0],
 		'CPP':   [0, 1, 0],
 		'CPPHF': [0, 1, 0],
-		'CPPHD': [0, 1, 0]
+		'CPPH': [0, 1, 0]
 	}
 	hatchs = {
-		'LF':    '//',
+		'L':    '//',
 		'R':     None,
 		'HF':    '\\\\',
-		'HD':    '++',
-		'CPPLF': '//',
+		'H':    '++',
+		'CPPL': '//',
 		'CPP':   None,
 		'CPPHF': '\\\\',
-		'CPPHD': '++'
+		'CPPH': '++'
 	}
 	lines = {
-		'LF':    '--ks',
+		'L':    '--ks',
 		'R':     '-ks',
 		'HF':    '-.ks',
-		'HD':    ':ks',
-		'CPPLF': '--k^',
+		'H':    ':ks',
+		'CPPL': '--k^',
 		'CPP':   '-k^',
 		'CPPHF': '-.k^',
-		'CPPHD': ':k^'
+		'CPPH': ':k^'
 	}
 	
 	############################################################################
@@ -825,13 +825,36 @@ if __name__ == "__main__":
 			LCOF[s] = this_LCOF
 			LCOV[s] = this_LCOV
 		plot_LCOE(LCOI, LCOF, LCOV)
-	else:
+	elif len(sys.argv) == 3:
 		db = sys.argv[1]
 		s  = sys.argv[2]
 		(LCOI, LCOF, LCOV) = LC_calculate_db(db, s)
 		LCOE = [LCOI[i] + LCOF[i] + LCOV[i] for i in range(0, len(LCOI))]
 		for y, lcoe in zip(range(2015, 2055, 5), LCOE):
 			print '{}   {:4.2f}   {}'.format(y, lcoe, '$/MWh')
+		# print 'LCOI'
+		# for y, lcoi in zip(range(2015, 2055, 5), LCOI):
+		# 	print '{}   {:4.2f}   {}'.format(y, lcoi, '$/MWh')
+		# print 'LCOF'
+		# for y, lcof in zip(range(2015, 2055, 5), LCOF):
+		# 	print '{}   {:4.2f}   {}'.format(y, lcof, '$/MWh')
+		# print 'LCOV'
+		# for y, lcov in zip(range(2015, 2055, 5), LCOV):
+		# 	print '{}   {:4.2f}   {}'.format(y, lcov, '$/MWh')
 
 		# LC_db(db)
+	else:
+		db = sys.argv[1]
+		scenarios = ['L', 'R', 'H', 'CPPL', 'CPP', 'CPPH']
+		LCOI = OrderedDict()
+		LCOF = OrderedDict()
+		LCOV = OrderedDict()
+		for s in scenarios:
+			print s
+			(this_LCOI, this_LCOF, this_LCOV) = LC_calculate_db(db, s)
+			LCOI[s] = this_LCOI
+			LCOF[s] = this_LCOF
+			LCOV[s] = this_LCOV
+		plot_LCOE(LCOI, LCOF, LCOV)
+
 
